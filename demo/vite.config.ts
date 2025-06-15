@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -15,6 +16,15 @@ export default defineConfig({
   define: {
     global: "window",
   },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html')
+      }
+    }
+  },
   server: {
     proxy: {
       '/api': {
@@ -22,12 +32,6 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         ws: true,
-        // Useful for debugging proxy issues
-        // configure: (proxy, options) => {
-        //   proxy.on('proxyReq', (proxyReq, req, res) => {
-        //     console.log('Proxying:', req.method, req.url);
-        //   });
-        // },
       },
     }
   },
