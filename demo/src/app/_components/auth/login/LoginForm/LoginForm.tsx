@@ -25,6 +25,7 @@ const LoginForm = () => {
     showPassword: false,
   });
   async function handleLogin(data: { email: string; password: string }) {
+    console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
     const result = await login({
       email: data?.email,
       password: data?.password,

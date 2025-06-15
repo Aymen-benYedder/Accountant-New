@@ -22,8 +22,19 @@ const companiesRoutes = require('./src/routes/companies');
 
 const app = express();
 
+// Enable CORS for all routes
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://accountant-new.onrender.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
 // Serve uploads statically from /uploads at root (http://localhost:3000/uploads/...)
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
+// Handle preflight requests
+app.options('*', cors());
 
 const server = http.createServer(app);
 

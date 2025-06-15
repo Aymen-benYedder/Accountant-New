@@ -32,6 +32,7 @@ function getCurrentUserJwt(): { userId: string | null, role: string | null } {
 }
 
 console.log("[ChatAppContent top-level] getCurrentUserJwt():", getCurrentUserJwt());
+console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
 
 const ChatAppContent = () => {
   const params = useParams();

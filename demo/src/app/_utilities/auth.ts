@@ -19,6 +19,7 @@ interface AuthResponse {
 }
 
 export async function login({ email, password }: LoginRequest): Promise<AuthResponse> {
+  console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
   const response = await api.post<AuthResponse>('/auth/login', { email, password });
   if (response.data?.token) {
     localStorage.setItem('token', response.data.token);

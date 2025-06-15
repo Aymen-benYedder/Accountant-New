@@ -14,7 +14,7 @@ import {
   alpha,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-
+console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
 export default function Signup1() {
   return (
     <Div

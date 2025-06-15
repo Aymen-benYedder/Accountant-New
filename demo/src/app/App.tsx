@@ -16,6 +16,7 @@ import { WebSocketProvider } from "@contexts/WebSocketContext";
 import { CONFIG } from "./_config";
 import { router } from "./_routes";
 import { Spinner } from "./_shared/Spinner";
+console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
 
 function App() {
   return (

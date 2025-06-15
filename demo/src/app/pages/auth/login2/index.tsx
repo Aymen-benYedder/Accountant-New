@@ -13,6 +13,7 @@ import { ASSET_IMAGES } from "@app/_utilities/constants/paths";
 import { LoginForm } from "@app/_components/auth/login";
 import { getAssetPath } from "@app/_utilities/helpers";
 import { useTranslation } from "react-i18next";
+console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
 
 const Login2 = () => {
   const { t } = useTranslation();

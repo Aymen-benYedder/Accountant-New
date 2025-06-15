@@ -15,7 +15,7 @@ import {
 } from "@mui/material";
 import shadows from "@mui/material/styles/shadows";
 import { useTranslation } from "react-i18next";
-
+console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
 export default function Login1() {
   const { t } = useTranslation();
   return (
