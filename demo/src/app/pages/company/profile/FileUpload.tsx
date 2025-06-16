@@ -5,7 +5,6 @@ import { useForm, Controller } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Progressbar } from "@app/_components/_core/Progressbar/Progressbar";
 
-const MAX_SIZE = 20 * 1024 * 1024;
 const ALLOWED_TYPES = [
   "application/pdf",
   "image/jpeg",
@@ -18,6 +17,7 @@ const ALLOWED_TYPES = [
   "text/plain",
   "text/csv",
 ];
+
 
 const categories = [
   { value: "Invoice", label: "Invoice" },

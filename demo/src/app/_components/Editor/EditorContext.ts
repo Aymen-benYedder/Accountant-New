@@ -1,7 +1,8 @@
+// demo\src\app\_components\Editor\EditorContext.ts
 import React from "react";
 import { EditorElement } from "./_types";
 
-interface EditorContextType {
+export interface EditorContextType {
   data: EditorElement[];
   onNewElement: (el?: EditorElement) => void;
 }

@@ -96,7 +96,7 @@ const CompanyProfilePage = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const [editPreview, setEditPreview] = useState<string | null>(null);
+  // Removed unused editPreview state
   const [editForm, setEditForm] = useState({
     name: "",
     address: "",
@@ -117,21 +117,13 @@ const CompanyProfilePage = () => {
         logo: company.logo ?? "",
         logoFile: null,
       });
-      setEditPreview(company.logo ?? null);
       setEditError(null);
     }
     // eslint-disable-next-line
   }, [company, editOpen]);
 
-  const handleEditChange = (field: keyof typeof editForm, value: any) => {
+  const handleEditChange = (field: string, value: any) => {
     setEditForm((prev) => ({ ...prev, [field]: value }));
-    if (field === "logoFile" && value instanceof File) {
-      const url = URL.createObjectURL(value);
-      setEditPreview(url);
-    }
-    if (field === "logo" && value && !editForm.logoFile) {
-      setEditPreview(value);
-    }
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
