@@ -5,7 +5,7 @@ import Button from "@mui/material/Button";
 const AutoCloseAlert = () => {
   const Swal = useSwalWrapper();
   const sweetAlerts = () => {
-    let timerInterval: number;
+    let timerInterval: ReturnType<typeof setInterval>;
     Swal.fire({
       title: "Auto close alert!",
       html: "I will close in <b></b> milliseconds.",
