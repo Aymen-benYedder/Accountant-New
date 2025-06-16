@@ -29,7 +29,8 @@ app.use(cors({
     'http://127.0.0.1:3000', 
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    'https://accountant-new.onrender.com'
+    'https://accountant-new.onrender.com',
+    'https://accountant-frontend.onrender.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
