@@ -35,10 +35,12 @@ const FavoriteConversationsList = () => {
       // Group messages into talks per counterpart user
       const convMap: Record<string, any> = {};
       msgList.forEach((m: any) => {
-        const counterpart =
-          m.senderId === userId ? m.recipientId : m.senderId;
-        if (!convMap[counterpart])
+        // Use sent_by if available, fall back to senderId for backward compatibility
+        const senderId = m.sent_by || m.senderId;
+        const counterpart = senderId === userId ? m.recipientId : senderId;
+        if (!convMap[counterpart]) {
           convMap[counterpart] = { userId: counterpart, messages: [] };
+        }
         convMap[counterpart].messages.push(m);
       });
       setConversations(Object.values(convMap));

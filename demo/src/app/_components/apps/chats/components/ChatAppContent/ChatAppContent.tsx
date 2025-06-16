@@ -167,14 +167,14 @@ const ChatAppContent = () => {
       const message = {
         ...newMessage,
         _id: newMessage._id || `temp-${Date.now()}`,
-        senderId: newMessage.senderId?.toString(),
+        sent_by: newMessage.sent_by || newMessage.senderId, // Support both formats
         recipientId: newMessage.recipientId?.toString(),
         content: newMessage.content,
         timestamp: newMessage.timestamp ? 
           (typeof newMessage.timestamp === 'string' ? newMessage.timestamp : new Date(newMessage.timestamp).toISOString()) : 
           new Date().toISOString(),
         status: 'delivered',
-        read: newMessage.senderId === currentUserId || (newMessage.read || false)
+        read: (newMessage.sent_by === currentUserId || newMessage.senderId === currentUserId) || (newMessage.read || false)
       };
 
       console.log(`[ChatAppContent] Received newMessage event:`, {
@@ -189,13 +189,14 @@ const ChatAppContent = () => {
       });
 
       // Check if this message is part of the current conversation
+      const senderId = message.sent_by || message.senderId;
       const isDirectMessage = chatBy === 'contact' && 
-        ((message.senderId === id && message.recipientId === currentUserId) ||
-         (message.senderId === currentUserId && message.recipientId === id));
+        ((senderId === id && message.recipientId === currentUserId) ||
+         (senderId === currentUserId && message.recipientId === id));
       
       const isTaskMessage = chatBy && chatBy !== 'contact' && 
         message.taskId === chatBy &&
-        (message.senderId === id || message.recipientId === id);
+        (senderId === id || message.recipientId === id);
       
       const isCurrentConversation = isDirectMessage || isTaskMessage;
       
@@ -213,16 +214,18 @@ const ChatAppContent = () => {
       if (isCurrentConversation) {
         setMessages(prevMessages => {
           // Check if message already exists to avoid duplicates
-          const exists = prevMessages.some((msg: any) => 
-            msg._id === message._id || 
-            (msg.status === 'sending' && msg.content === message.content && msg.senderId === message.senderId)
-          );
+          const exists = prevMessages.some((msg: any) => {
+            const msgSenderId = msg.sent_by || msg.senderId;
+            const newMsgSenderId = message.sent_by || message.senderId;
+            return msg._id === message._id || 
+              (msg.status === 'sending' && msg.content === message.content && msgSenderId === newMsgSenderId);
+          });
           
           if (exists) {
             console.log(`[ChatAppContent] Message exists, updating in place`);
             return prevMessages.map((msg: any) => 
               (msg._id === message._id || 
-               (msg.status === 'sending' && msg.content === message.content && msg.senderId === message.senderId))
+               (msg.status === 'sending' && msg.content === message.content && (msg.sent_by || msg.senderId) === (message.sent_by || message.senderId)))
                 ? { ...message, status: 'delivered' }
                 : msg
             );
@@ -236,7 +239,7 @@ const ChatAppContent = () => {
         scrollToBottom();
 
         // If this is a message from the other user, mark it as read
-        if (message.senderId !== currentUserId) {
+        if ((message.sent_by || message.senderId) !== currentUserId) {
           markMessagesAsRead();
         }
       }

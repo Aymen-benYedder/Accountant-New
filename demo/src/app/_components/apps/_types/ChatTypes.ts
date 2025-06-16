@@ -5,7 +5,7 @@ interface UserProps {
   status: string;
 }
 interface MessagesProps {
-  senderId: any;
+  senderId?: any; // Made optional to match mock data
   id: number | string;
   _id?: string;
   message_type: string;
@@ -16,7 +16,7 @@ interface MessagesProps {
   sent_date?: string;
   unread: boolean;
   read?: boolean;
-  sent_by: number;
+  sent_by: number; // This is the actual field used in mock data
   recipientId?: string | number;
   status?: string;
   taskId?: string;

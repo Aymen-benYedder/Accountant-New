@@ -17,7 +17,7 @@ interface EnhancedMessageProps extends MessagesProps {
 const ActiveConversationChat = (props: any) => {
   console.log('[ActiveConversationChat] received props:', props);
   const { conversation, activeConversation, currentUserId } = props;
-  // Assume messages array has senderId populated for each message
+  // Using sent_by from the mock data instead of senderId
   const remoteUser = activeConversation?.contact;
   
   // Memoize the message list to prevent unnecessary re-renders
@@ -62,12 +62,12 @@ const ActiveConversationChat = (props: any) => {
         />
       </Div>
       {messages.map((message: EnhancedMessageProps, index: number) => {
-        const isOwnMessage = message.senderId === currentUserId;
+        const isOwnMessage = message.sent_by === currentUserId;
         let senderName = "Contact";
         
-        if (message.senderId === currentUserId) {
+        if (message.sent_by === currentUserId) {
           senderName = "You";
-        } else if (message.senderId === remoteUser?._id) {
+        } else if (message.sent_by === remoteUser?.id) {
           senderName = remoteUser?.name ?? "Contact";
         }
         
