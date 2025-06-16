@@ -88,7 +88,7 @@ function mapCompanyToProject(c: CompanyBackend, idx: number): ProjectType & { ti
           name: owner.name,
           profilePic: demoAvatars[i % demoAvatars.length],
         }))
-      : c.owner
+      : c.owner && typeof c.owner === 'object' && 'name' in c.owner
         ? [{
             name: c.owner.name ?? "Owner",
             profilePic: demoAvatars[0],

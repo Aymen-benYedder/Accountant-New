@@ -23,16 +23,12 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import {
   Search as SearchIcon,
-  Description as FileIcon,
   Download as DownloadIcon,
   PictureAsPdf as PdfIcon,
   Image as ImageIcon,
   InsertDriveFile as GenericFileIcon,
   InsertChart as ExcelIcon,
-  PictureAsPdf,
-  Description,
   TableChart as TableIcon,
-  InsertPhoto,
   TextSnippet as TextIcon,
   InsertDriveFileOutlined as WordIcon,
 } from "@mui/icons-material";
@@ -54,7 +50,7 @@ type Document = {
   path: string;
 };
 
-const formatDate = (dateStr) =>
+const formatDate = (dateStr: string): string =>
   new Date(dateStr).toLocaleString(undefined, {
     year: "2-digit",
     month: "short",

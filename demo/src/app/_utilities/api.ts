@@ -1,6 +1,6 @@
 // src/app/_utilities/api.ts
 
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
 

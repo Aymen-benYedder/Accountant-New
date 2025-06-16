@@ -1,11 +1,23 @@
-import { View } from "@app/_components/_core";
-import { ClientItem, ClientProps, clients } from "@app/_components/views/list/Clients";
 import { CONTAINER_MAX_WIDTH } from "@app/_config/layouts";
-import { Container, Typography } from "@mui/material";
+import { Container, Typography, List, ListItem, ListItemText } from "@mui/material";
 import { useTranslation } from "react-i18next";
+
+// Temporary interface for Client
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// Temporary mock data
+const mockClients: Client[] = [
+  { id: '1', name: 'Client 1', email: 'client1@example.com' },
+  { id: '2', name: 'Client 2', email: 'client2@example.com' },
+];
 
 export default function ClientsListPage() {
   const { t } = useTranslation();
+  
   return (
     <Container
       maxWidth={false}
@@ -21,11 +33,13 @@ export default function ClientsListPage() {
       <Typography variant={"h2"} mb={3}>
         {t("views.title.clients")}
       </Typography>
-      <View<ClientProps>
-        variant="list"
-        dataSource={clients}
-        renderItem={ClientItem}
-      />
+      <List>
+        {mockClients.map((client) => (
+          <ListItem key={client.id}>
+            <ListItemText primary={client.name} secondary={client.email} />
+          </ListItem>
+        ))}
+      </List>
     </Container>
   );
 }
