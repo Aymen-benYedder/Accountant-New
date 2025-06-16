@@ -1,8 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View } from "@app/_components/_core";
-import { ProjectItem } from "@app/_components/views/list/Projects";
 import { MenuItem } from "@mui/material";
-import { useApp } from "@app/_components/AppProvider/_hooks";
 import { useAuth } from "@app/_components/_core/AuthProvider/AuthContext";
 import type { ProjectType } from "@app/_components/views/list/Projects/data";
 import { CONTAINER_MAX_WIDTH } from "@app/_config/layouts";
@@ -58,7 +55,7 @@ interface CompanyBackend {
 }
 
 // --- Map company from backend to ProjectType for template ---
-function mapCompanyToProject(c: CompanyBackend, idx: number): ProjectType & { tin?: string } {
+function mapCompanyToProject(c: CompanyBackend, _idx: number): ProjectType & { tin?: string } {
   const created = c.createdAt ? new Date(c.createdAt) : undefined;
   const updated = c.updatedAt ? new Date(c.updatedAt) : undefined;
   const demoAvatars = [
@@ -83,14 +80,14 @@ function mapCompanyToProject(c: CompanyBackend, idx: number): ProjectType & { ti
       chip_color: "success",
       label: "Owned",
     },
-    team: Array.isArray(c.owners)
+    team: Array.isArray(c.owners) && c.owners.length > 0
       ? c.owners.map((owner, i) => ({
           name: owner.name,
           profilePic: demoAvatars[i % demoAvatars.length],
         }))
-      : c.owner && typeof c.owner === 'object' && 'name' in c.owner
+      : c.owner && typeof c.owner === 'string'
         ? [{
-            name: c.owner.name ?? "Owner",
+            name: c.owner,
             profilePic: demoAvatars[0],
           }]
         : [],
@@ -146,7 +143,6 @@ export default function ProjectsListPage() {
     logo: "",
     logoFile: null as File | null,
   });
-  const [addPreview, setAddPreview] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [addLoading, setAddLoading] = useState<boolean>(false);
 
@@ -175,10 +171,9 @@ export default function ProjectsListPage() {
     logo: "",
     logoFile: null as File | null,
   });
-  const [editPreview, setEditPreview] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState<boolean>(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCompaniesAndUsers();
@@ -234,7 +229,6 @@ export default function ProjectsListPage() {
       logo: c.logo ?? "",
       logoFile: null,
     });
-    setEditPreview(c.logo ?? null);
     setEditError(null);
   };
   const closeEditDialog = () => {
@@ -262,19 +256,11 @@ export default function ProjectsListPage() {
       logo: "",
       logoFile: null,
     });
-    setEditPreview(null);
     setEditError(null);
     setEditLoading(false);
   };
   const handleEditChange = (field: keyof typeof editForm, value: any) => {
     setEditForm((prev) => ({ ...prev, [field]: value }));
-    if (field === "logoFile" && value instanceof File) {
-      const url = URL.createObjectURL(value);
-      setEditPreview(url);
-    }
-    if (field === "logo" && value && !editForm.logoFile) {
-      setEditPreview(value);
-    }
   };
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -356,7 +342,6 @@ export default function ProjectsListPage() {
       logo: "",
       logoFile: null,
     });
-    setAddPreview(null);
     setAddError(null);
   };
   const closeAddDialog = () => {
@@ -384,19 +369,11 @@ export default function ProjectsListPage() {
       logo: "",
       logoFile: null,
     });
-    setAddPreview(null);
     setAddError(null);
     setAddLoading(false);
   };
   const handleAddChange = (field: keyof typeof addForm, value: any) => {
     setAddForm((prev) => ({ ...prev, [field]: value }));
-    if (field === "logoFile" && value instanceof File) {
-      const url = URL.createObjectURL(value);
-      setAddPreview(url);
-    }
-    if (field === "logo" && value && !addForm.logoFile) {
-      setAddPreview(value);
-    }
   };
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,5 +1,4 @@
-import { ChatAppContent, ChatAppSidebar } from "@app/_components/apps/chats";
-import { ContentLayout } from "@app/_layouts";
+import { ChatAppContent } from "@app/_components/apps/chats";
 import { useJumboTheme } from "@jumbo/components/JumboTheme/hooks";
 import { Card, Theme, useMediaQuery } from "@mui/material";
 import React from "react";
@@ -49,19 +48,12 @@ const useChatLayout = () => {
   );
 };
 const ChatAppPage = () => {
-  const chatLayoutOptions = useChatLayout();
   // Sidebar eliminated per request; code commented out
-  // return (
-  //   <ContentLayout sidebar={<ChatAppSidebar />} {...chatLayoutOptions}>
-  //     <ChatAppContent />
-  //   </ContentLayout>
-  // );
-
-  // Only render the chat content
+  
   return (
-    <div style={{ width: '100%' }}>
+    <Card sx={{ display: "flex", minHeight: "100%" }}>
       <ChatAppContent />
-    </div>
+    </Card>
   );
 };
 export default ChatAppPage;

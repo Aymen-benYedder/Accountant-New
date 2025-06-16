@@ -4,7 +4,6 @@ import {
 } from "@app/_components/common";
 import { experiencesData } from "@app/_components/common/data";
 import {
-  About,
   Profile2Header,
   Profile2Sidebar,
   Profile2Skill,

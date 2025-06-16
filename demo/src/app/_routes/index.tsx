@@ -1,6 +1,5 @@
 import { Page } from "@app/_components/_core";
 import { AuthGuard } from "@app/_components/_core/AuthGuard/AuthGuard";
-import { MarkerClustererMap } from "@app/_components/maps";
 import {
   ActiveLogin,
   AdvertisingSettings,
@@ -15,7 +14,6 @@ import {
   TeamSettings,
   TwoFactorAuth,
 } from "@app/_components/user/settings";
-import { NewLayout1 } from "@app/_layouts/NewLayout1";
 import { SettingsLayout } from "@app/_layouts/SettingsLayout";
 import { SoloLayout } from "@app/_layouts/SoloLayout";
 import { StretchedLayout } from "@app/_layouts/StretchedLayout";
@@ -68,7 +66,6 @@ import RadarChartPage from "@app/pages/modules/charts/radar";
 import RadialChartPage from "@app/pages/modules/charts/radial";
 import ScatterChartPage from "@app/pages/modules/charts/scatter";
 import TreeMapChartPage from "@app/pages/modules/charts/treemap";
-import MarkerClustererPage from "@app/pages/modules/maps/clustering";
 import DirectionsMapPage from "@app/pages/modules/maps/directions";
 import DrawingViewMapPage from "@app/pages/modules/maps/drawing";
 import GeoLocationMapPage from "@app/pages/modules/maps/geo-location";
@@ -81,7 +78,6 @@ import StyledMapPage from "@app/pages/modules/maps/styled";
 import OnboardingPage1 from "@app/pages/onboarding-1";
 import OnboardingPage2 from "@app/pages/onboarding-2";
 import OnboardingPage3 from "@app/pages/onboarding-3";
-import Layout1 from "@app/pages/testing";
 import UserProfile from "@app/pages/user/profile-1";
 import ProfilePage1 from "@app/pages/user/profile-2";
 import ProfilePage2Dynamic from "@app/pages/user/profile-2/[id].tsx";
@@ -176,7 +172,6 @@ const routes = [
           { path: "modules/maps/popup-info", element: <Page Component={PopupInfoMapPage} /> },
           { path: "modules/maps/street-view", element: <Page Component={StreetViewPanoramaPage} /> },
           { path: "modules/maps/drawing", element: <Page Component={DrawingViewMapPage} /> },
-          { path: "modules/maps/clustering", element: <Page Component={MarkerClustererMap} /> },
           { path: "extra-pages/about-us", element: <Page Component={AboutUsPage} /> },
           { path: "extra-pages/contact-us", element: <Page Component={ContactUsPage} /> },
           { path: "extra-pages/call-outs", element: <Page Component={CallOutsPage} /> },

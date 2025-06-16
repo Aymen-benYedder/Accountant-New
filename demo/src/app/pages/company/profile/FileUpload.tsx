@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Card, Button, Box, Alert, Typography, TextField, MenuItem, CircularProgress, LinearProgress } from "@mui/material";
+import { Card, Button, Box, Alert, Typography, TextField, MenuItem, CircularProgress } from "@mui/material";
 import { CloudUpload, ErrorOutline } from "@mui/icons-material";
 import { useForm, Controller } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -85,12 +85,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({ companyId, refreshDocume
     },
   });
 
-  function validateFile(file: File | null): string | true {
-    if (!file) return "File is required";
-    if (file.size > MAX_SIZE) return "File too large (max 20MB)";
-    if (!ALLOWED_TYPES.includes(file.type)) return "File type not allowed";
-    return true;
-  }
+  // function validateFile(file: File | null): string | true {
+  //   if (!file) return "File is required";
+  //   if (file.size > MAX_SIZE) return "File too large (max 20MB)";
+  //   if (!ALLOWED_TYPES.includes(file.type)) return "File type not allowed";
+  //   return true;
+  // }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();

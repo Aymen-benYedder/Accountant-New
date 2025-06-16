@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CONTAINER_MAX_WIDTH } from "@app/_config/layouts";
 // Import the WebSocket hook directly
 const useWebSocket = () => ({
-  isUserOnline: (userId: string) => false // Default implementation
+  isUserOnline: (_userId: string) => false // Default implementation
 });
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -25,7 +25,6 @@ import {
   Card,
   Avatar,
   Badge,
-  SelectChangeEvent,
 } from "@mui/material";
 import { Add, Edit, Delete, Star, StarBorder } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";

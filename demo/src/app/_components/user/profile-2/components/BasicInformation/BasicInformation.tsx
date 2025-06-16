@@ -5,7 +5,6 @@ import {
   ListItemText,
   Typography,
 } from "@mui/material";
-import { usersData } from "../../data";
 
 interface BackendUser {
   _id: string;
