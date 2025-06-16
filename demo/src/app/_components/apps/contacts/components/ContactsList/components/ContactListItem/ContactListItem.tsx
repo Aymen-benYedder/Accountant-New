@@ -16,8 +16,6 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import StarIcon from "@mui/icons-material/Star";
-// Add navigation for chat
-import { useNavigate } from "react-router-dom";
 import React from "react";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { useJumboDialog } from "@jumbo/components/JumboDialog/hooks/useJumboDialog";

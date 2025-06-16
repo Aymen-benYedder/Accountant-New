@@ -245,20 +245,7 @@ const ChatAppContent = () => {
       }
     };
 
-    // Helper function to check if user is near the bottom of the chat
-    const isUserNearBottom = () => {
-      if (!scrollRef.current) return false;
-      try {
-        const container = scrollRef.current.container || scrollRef.current;
-        if (!container) return false;
-        
-        const { scrollTop, scrollHeight, clientHeight } = container;
-        return scrollHeight - scrollTop - clientHeight < 200;
-      } catch (error) {
-        console.error('Error checking scroll position:', error);
-        return false;
-      }
-    };
+    // Scroll helper function removed - was unused
 
     socket.on('newMessage', handleNewMessage);
     
