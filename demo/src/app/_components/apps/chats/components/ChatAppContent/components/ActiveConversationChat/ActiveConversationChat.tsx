@@ -1,6 +1,5 @@
 import React from "react";
 import { Box, Chip, Typography } from "@mui/material";
-import { Div } from "@jumbo/shared";
 import { SentMessageContent } from "../SentMessageContent";
 import { ReceivedMessageContent } from "../ReceivedMessageContent";
 import { MessagesProps } from "@app/_components/apps/_types/ChatTypes";
@@ -42,7 +41,9 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
     return (conversation?.messages || []).sort((a, b) => {
       const getTime = (msg: EnhancedMessageProps): number => {
         const time = msg.timestamp || msg.createdAt || msg.sent_at;
-        return time ? new Date(time).getTime() : 0;
+        if (!time) return 0;
+        // Convert to timestamp if it's a Date object or string
+        return time instanceof Date ? time.getTime() : new Date(time).getTime();
       };
       return getTime(a) - getTime(b);
     });

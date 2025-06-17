@@ -6,15 +6,14 @@ interface ReceivedMessageContentProps {
   message: MessagesProps & {
     content: string;
     timestamp?: string | Date;
+    sent_at?: string | Date;
   };
   senderName: string;
-  senderAvatar?: string;
 }
 
 const ReceivedMessageContent: React.FC<ReceivedMessageContentProps> = ({
   message,
-  senderName,
-  senderAvatar
+  senderName
 }) => {
   // Format the timestamp
   const formatTimestamp = (timestamp?: string | Date) => {
@@ -81,7 +80,7 @@ const ReceivedMessageContent: React.FC<ReceivedMessageContentProps> = ({
           color="text.secondary"
           sx={{ mt: 0.5, alignSelf: 'flex-start' }}
         >
-          {formatTimestamp(message.timestamp || message.sent_at)}
+          {formatTimestamp(message.timestamp || message.sent_at || undefined)}
         </Typography>
       </Box>
     </Box>

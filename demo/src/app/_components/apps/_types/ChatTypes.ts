@@ -12,8 +12,8 @@ interface MessagesProps {
   message: string;
   content?: string; // Alias for message
   timestamp?: string | Date; // ISO string or Date object
-  sent_at?: string; // Legacy timestamp
-  sent_date?: string;
+  sent_at?: string | Date; // Can be either string or Date
+  sent_date?: string | Date; // Can be either string or Date
   unread: boolean;
   read?: boolean;
   sent_by: number; // This is the actual field used in mock data
