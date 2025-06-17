@@ -4,11 +4,11 @@ import { Scrollbars } from 'react-custom-scrollbars-2';
 import { useParams } from "react-router-dom";
 import api from "@app/_utilities/api";
 import { useWebSocket } from "../../../../../../contexts/WebSocketContext";
+import { ActiveConversationChat } from "./components/ActiveConversationChat";
 import {
   ActiveConversationFooter,
   ActiveConversationHeader,
   ContentPlaceholder,
-  ConversationChatGroupByDate,
 } from "./components";
 
 function getCurrentUserJwt(): { userId: string | null, role: string | null } {
@@ -368,15 +368,22 @@ const ChatAppContent = () => {
   // If not in an active conversation, render the chat inbox with sidebar
   if (!id && currentUserId) {
     return (
-      <div style={{ display: "flex", minHeight: 400 }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         {/* Placeholder for Chat Sidebar */}
-        <div style={{ width: 280, borderRight: "1px solid #eee", padding: 16 }}>
+        <div style={{ borderBottom: "1px solid #eee", padding: 16 }}>
           <h3 style={{ margin: "8px 0" }}>Chats</h3>
           {/* TODO: Render a list of conversations here, e.g., <ChatSidebar userId={currentUserId} /> */}
           <div style={{ color: "#aaa" }}>All chats will be listed here (sidebar)</div>
         </div>
-        {/* Optionally, center content */}
-        <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", color: "#888" }}>
+        {/* Center content */}
+        <div style={{ 
+          flex: 1, 
+          display: "flex", 
+          justifyContent: "center", 
+          alignItems: "center", 
+          color: "#888",
+          minHeight: 400
+        }}>
           <span>Select a conversation</span>
         </div>
       </div>
@@ -410,36 +417,75 @@ const ChatAppContent = () => {
   console.log("[ActiveConversationHeader prop] activeConversation:", activeConversation);
 
   return (
-    <React.Fragment>
-      <div style={{ border: "1px solid #ddd", margin: 8, padding: 8, color: "#666" }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100vh',
+      maxHeight: '100vh',
+      width: '100%',
+      overflow: 'hidden'
+    }}>
+      {/* Debug info - can be removed in production */}
+      <div style={{ 
+        border: "1px solid #ddd", 
+        margin: 8, 
+        padding: 8, 
+        color: "#666",
+        fontSize: '0.8rem'
+      }}>
         <div>Debug: id={id}, chatBy={chatBy}, currentUser={currentUserId}</div>
         <div>Msg count: {messages.length} / Name: {remoteUser?.name || "?"}</div>
         <div>Header Contact Name: {activeConversation?.contact?.name || "-"}</div>
       </div>
+      
+      {/* Header */}
       <ActiveConversationHeader 
         activeConversation={activeConversation} 
         hasUnreadMessages={unreadCount > 0}
       />
-      <JumboScrollbar
-        autoHide
-        autoHideDuration={200}
-        autoHideTimeout={500}
-        autoHeightMin={30}
-        style={{ minHeight: 200 }}
-        ref={scrollRef}
-      >
-        <ConversationChatGroupByDate
-          activeConversation={activeConversation}
-          currentUserId={currentUserId}
+      
+      {/* Messages area with scroll */}
+      <div style={{ 
+        flex: '1 1 auto',
+        minHeight: 0, // Important for Firefox
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <JumboScrollbar
+          autoHide
+          autoHideDuration={200}
+          autoHideTimeout={500}
+          style={{ 
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+          ref={scrollRef}
+        >
+          <ActiveConversationChat
+            conversation={activeConversation}
+            activeConversation={activeConversation}
+            currentUserId={currentUserId}
+            loading={loading}
+          />
+        </JumboScrollbar>
+      </div>
+      
+      {/* Message input */}
+      <div style={{ 
+        borderTop: '1px solid #eee',
+        padding: '16px',
+        backgroundColor: '#fff'
+      }}>
+        <ActiveConversationFooter
+          remoteUserId={id || ""}
+          taskId={chatBy || ""}
+          onSendMessage={handleSend}
+          onMessageSent={reloadMessages}
         />
-      </JumboScrollbar>
-      <ActiveConversationFooter
-        remoteUserId={id || ""}
-        taskId={chatBy || ""}
-        onSendMessage={handleSend}
-        onMessageSent={reloadMessages}
-      />
-    </React.Fragment>
+      </div>
+    </div>
   );
 };
 

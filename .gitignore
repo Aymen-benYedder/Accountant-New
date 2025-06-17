@@ -4,6 +4,7 @@ node_modules/
 .pnp.js
 server/node_modules/
 demo/node_modules/
+demo_old/
 # Testing
 coverage/
 

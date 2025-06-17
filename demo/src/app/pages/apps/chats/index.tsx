@@ -7,7 +7,11 @@ const ChatAppPage = () => {
     <Card
       sx={{
         display: "flex",
-        minHeight: "100%",
+        flexDirection: "column",
+        height: "calc(100vh - 64px - 32px)", // Account for header and padding
+        minHeight: 600,
+        width: "100%",
+        overflow: "hidden"
       }}
     >
       <ChatAppContent />

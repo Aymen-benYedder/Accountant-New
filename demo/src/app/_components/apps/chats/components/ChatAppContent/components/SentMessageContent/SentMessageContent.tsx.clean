@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Typography, Paper } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { MessagesProps } from "@app/_components/apps/_types/ChatTypes";
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -25,7 +25,7 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
   const status = propStatus || message.status || 'sent';
   
   // Format the timestamp
-  const formatTimestamp = (timestamp?: string | Date): string => {
+  const formatTimestamp = (timestamp?: string | Date) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -56,52 +56,43 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
         alignItems: 'flex-end',
         mb: 2,
         width: '100%',
-        px: 1
+        maxWidth: '80%',
+        alignSelf: 'flex-end'
       }}
     >
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{ mb: 0.5, fontWeight: 500 }}
+      >
+        {senderName}
+      </Typography>
       <Box
         sx={{
-          display: 'inline-flex',
+          display: 'flex',
           flexDirection: 'column',
-          maxWidth: '85%',
-          alignItems: 'flex-end'
+          alignItems: 'flex-end',
+          maxWidth: '100%'
         }}
       >
-        <Typography
-          variant="caption"
-          color="text.secondary"
+        <Box
           sx={{
-            fontSize: '0.75rem',
-            mb: 0.5,
-            textAlign: 'right',
-            pr: 1
-          }}
-        >
-          {senderName}
-        </Typography>
-        <Paper
-          elevation={0}
-          sx={{
-            px: 2,
-            py: 1.5,
             bgcolor: 'primary.main',
             color: 'primary.contrastText',
+            p: 2,
             borderRadius: 2,
             borderTopRightRadius: 0,
-            maxWidth: '100%',
+            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.1)',
             position: 'relative',
             '&:before': {
               content: '""',
               position: 'absolute',
               top: 0,
-              right: 0,
-              width: 0,
-              height: 0,
-              border: '8px solid transparent',
-              borderTopColor: 'primary.main',
-              borderRight: 0,
-              marginTop: 0,
-              marginRight: '-8px',
+              right: -8,
+              width: 16,
+              height: 16,
+              clipPath: 'polygon(100% 0, 0 100%, 100% 100%)',
+              bgcolor: 'primary.main',
               transform: 'rotate(90deg)'
             }
           }}
@@ -109,28 +100,17 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
           <Typography variant="body1" sx={{ wordBreak: 'break-word' }}>
             {message.content}
           </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              alignItems: 'center',
-              mt: 1,
-              gap: 0.5
-            }}
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mr: 0.5 }}
           >
-            <Typography
-              variant="caption"
-              sx={{
-                color: 'rgba(255, 255, 255, 0.7)',
-                fontSize: '0.7rem',
-                lineHeight: 1
-              }}
-            >
-              {formatTimestamp(message.timestamp || message.sent_at)}
-            </Typography>
-            {getStatusIcon()}
-          </Box>
-        </Paper>
+            {formatTimestamp(message.timestamp || message.sent_at)}
+          </Typography>
+          {getStatusIcon()}
+        </Box>
       </Box>
     </Box>
   );
