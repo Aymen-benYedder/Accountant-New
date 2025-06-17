@@ -1,6 +1,5 @@
 import React from "react";
 import { Box, Typography, Paper } from "@mui/material";
-import { MessagesProps } from "@app/_components/apps/_types/ChatTypes";
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
