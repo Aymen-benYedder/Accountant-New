@@ -5,13 +5,14 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error' | string;
 
 interface SentMessageContentProps {
-  message: MessagesProps & {
+  message: {
     content: string;
     timestamp?: string | Date;
     status?: MessageStatus;
+    [key: string]: any; // Allow additional properties
   };
   senderName: string;
   status?: MessageStatus;

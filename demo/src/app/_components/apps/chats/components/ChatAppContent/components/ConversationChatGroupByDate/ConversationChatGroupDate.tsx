@@ -1,38 +1,78 @@
 import React from "react";
 import { ActiveConversationChat } from "../ActiveConversationChat";
 import { MessagesProps } from "@app/_components/apps/_types/ChatTypes";
-/** todo : change any typescript */
-const chatGroupedByDate = (array: any[], key: any) =>
-  Object.entries(
-    array.reduce((result, { [key]: k, ...rest }) => {
-      (result[k] = result[k] || []).push(rest);
+
+interface GroupedMessages {
+  sent_date: string;
+  messages: Array<MessagesProps & { content: string }>; // Ensure messages have content
+}
+
+interface ConversationChatGroupByDateProps {
+  activeConversation?: {
+    messages: MessagesProps[];
+    contact?: {
+      id: string;
+      name: string;
+      avatar?: string;
+    };
+  };
+  currentUserId?: string | null;
+}
+
+const chatGroupedByDate = (
+  array: MessagesProps[],
+  key: keyof MessagesProps
+): GroupedMessages[] => {
+  // Filter out messages without content and ensure they have the required properties
+  const validMessages = array.filter((msg): msg is MessagesProps & { content: string } => {
+    return typeof msg.content === 'string' && typeof msg.message_type === 'string';
+  });
+
+  const grouped = validMessages.reduce<Record<string, Array<MessagesProps & { content: string }>>>(
+    (result, item) => {
+      const groupKey = String(item[key] || '');
+      if (!result[groupKey]) {
+        result[groupKey] = [];
+      }
+      result[groupKey].push(item);
       return result;
-    }, {})
-  ).map(([sent_date, messages]) => ({
+    }, 
+    {}
+  );
+
+  return Object.entries(grouped).map(([sent_date, messages]) => ({
     sent_date,
     messages,
   }));
-const ConversationChatGroupByDate = ({
+};
+
+const ConversationChatGroupByDate: React.FC<ConversationChatGroupByDateProps> = ({
   activeConversation,
   currentUserId,
-}: {
-  activeConversation?: { messages: MessagesProps[] };
-  currentUserId?: string | null;
 }) => {
   const conversationMessages = React.useMemo(() => {
-    if (activeConversation)
-      return chatGroupedByDate(activeConversation?.messages, "sent_date");
-
+    if (activeConversation?.messages?.length) {
+      return chatGroupedByDate(activeConversation.messages, "sent_date");
+    }
     return [];
   }, [activeConversation]);
+
+  if (!activeConversation) {
+    return null;
+  }
+
   return (
     <React.Fragment>
-      {conversationMessages?.map((messagesGroupByDate, index) => (
+      {conversationMessages.map((messagesGroupByDate, index) => (
         <ActiveConversationChat
-          key={index}
-          conversation={messagesGroupByDate}
+          key={`${messagesGroupByDate.sent_date}-${index}`}
+          conversation={{
+            messages: messagesGroupByDate.messages,
+            sent_date: messagesGroupByDate.sent_date,
+          }}
           activeConversation={activeConversation}
-          currentUserId={currentUserId}
+          currentUserId={currentUserId || ''}
+          loading={false}
         />
       ))}
     </React.Fragment>

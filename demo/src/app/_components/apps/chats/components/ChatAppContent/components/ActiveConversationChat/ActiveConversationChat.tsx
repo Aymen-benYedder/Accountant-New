@@ -4,15 +4,19 @@ import { SentMessageContent } from "../SentMessageContent";
 import { ReceivedMessageContent } from "../ReceivedMessageContent";
 import { MessagesProps } from "@app/_components/apps/_types/ChatTypes";
 
-interface EnhancedMessageProps extends MessagesProps {
+// Union of specific status values we expect, plus any string for backward compatibility
+type MessageStatus = 'sending' | 'delivered' | 'error' | string;
+
+// Enhanced message type that makes content required and handles status properly
+type EnhancedMessageProps = Omit<MessagesProps, 'status' | 'content'> & {
   _id?: string;
-  status?: 'sending' | 'delivered' | 'error';
+  status?: MessageStatus;
   timestamp?: string | Date;
   createdAt?: string | Date;
   sent_at?: string | Date;
   read?: boolean;
   senderId?: string;
-  content: string;
+  content: string; // Required in enhanced type
 }
 
 interface ActiveConversationChatProps {
