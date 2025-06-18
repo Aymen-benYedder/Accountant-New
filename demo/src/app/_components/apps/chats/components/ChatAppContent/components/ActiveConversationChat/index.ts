@@ -1,1 +1,1 @@
-export * from "./ActiveConversationChat";
+export * from "./ActiveConversationChat.tsx";
