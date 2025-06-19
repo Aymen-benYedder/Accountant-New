@@ -18,8 +18,14 @@ const getAllCompanies = async (req, res) => {
     }
     const companies = await Company.find(filter).populate("accountant owner", "name email");
     console.log("[CompanyController:getAllCompanies] Results found:", companies.length);
+    
+    if (companies.length === 0) {
+      console.log("[CompanyController:getAllCompanies] No companies found with filter:", filter);
+    }
+    
     res.json(companies);
   } catch (err) {
+    console.error("[CompanyController:getAllCompanies] Error:", err);
     res.status(500).json({ message: "Error fetching companies", error: err.message });
   }
 };

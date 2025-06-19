@@ -183,14 +183,23 @@ export default function ProjectsListPage() {
     try {
       setLoading(true);
       setError(null);
-      const [companiesRes, usersRes] = await Promise.all([
-        api.get<CompanyBackend[]>("/companies"),
-        api.get<any[]>("/users"),
-      ]);
+      
+      // Always fetch companies
+      const companiesRes = await api.get<CompanyBackend[]>("/companies");
       setCompanies(companiesRes.data);
-      setUsers(usersRes.data);
+      
+      // Only fetch users if admin or accountant
+      if (user?.role === 'admin' || user?.role === 'accountant') {
+        try {
+          const usersRes = await api.get<any[]>("/users");
+          setUsers(usersRes.data);
+        } catch (err) {
+          console.warn('Could not fetch users (expected if not admin/accountant):', err);
+        }
+      }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      console.error('Error fetching data:', err);
+      setError(err.response?.data?.error || err.message || 'Error loading data');
     } finally {
       setLoading(false);
     }

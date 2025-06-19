@@ -32,7 +32,22 @@ const createApiClient = (): AxiosInstance => {
   api.interceptors.response.use(
     (response) => response,
     (error) => {
-      // Handle global errors here
+      if (error.response) {
+        // Handle specific status codes
+        if (error.response.status === 403) {
+          console.error('Access denied:', error.response.data?.message || 'You do not have permission to access this resource');
+          // Optionally redirect to dashboard or show a message
+          if (typeof window !== 'undefined' && window.location.pathname !== '/dashboards/crypto') {
+            // window.location.href = '/dashboards/crypto';
+          }
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error('No response received:', error.request);
+      } else {
+        // Something happened in setting up the request
+        console.error('Request setup error:', error.message);
+      }
       return Promise.reject(error);
     }
   );
