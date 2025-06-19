@@ -1,5 +1,8 @@
 import { useTranslation } from "react-i18next";
 
+// This file is kept for backward compatibility
+// New role-based menu logic is in useRoleBasedMenus.ts
+
 export function getMenus() {
   const { t } = useTranslation();
   return [

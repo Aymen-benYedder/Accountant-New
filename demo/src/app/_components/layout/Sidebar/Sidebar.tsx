@@ -3,18 +3,17 @@ import { useJumboLayout } from "@jumbo/components/JumboLayout/hooks";
 import { JumboScrollbar } from "@jumbo/components/JumboScrollbar";
 import { useJumboSidebarTheme } from "@jumbo/components/JumboTheme/hooks";
 import { Div } from "@jumbo/shared";
-import { MenuItems } from "@jumbo/types";
 import { SIDEBAR_STYLES, SIDEBAR_VIEWS } from "@jumbo/utilities/constants";
-import React, { Suspense } from "react";
+import React, { Suspense, useMemo } from "react";
 import { SidebarHeader, SidebarSkeleton } from "./components";
+import { useRoleBasedMenus } from "./useRoleBasedMenus";
 
-type SidebarProps = {
-  menus: MenuItems;
-};
-
-function Sidebar({ menus }: SidebarProps) {
+function Sidebar() {
   const { sidebarTheme } = useJumboSidebarTheme();
   const { sidebarOptions } = useJumboLayout();
+  const roleBasedMenus = useRoleBasedMenus();
+  
+  const menus = useMemo(() => roleBasedMenus, [roleBasedMenus]);
   return (
     <React.Fragment>
       {sidebarOptions?.style !== SIDEBAR_STYLES.CLIPPED_UNDER_HEADER && (
