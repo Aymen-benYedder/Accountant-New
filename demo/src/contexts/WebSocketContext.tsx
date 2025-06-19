@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useCallback, useState, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useCallback, useState, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 // Import useAuth with a safe default to handle cases where AuthProvider is not available
 let useAuth: any = () => ({});
@@ -15,6 +15,7 @@ export interface WebSocketContextType {
   socket: Socket | null;
   isConnected: boolean;
   onlineUsers: Set<string>;
+  lastMessage: any | null;
   sendMessage: (message: any) => void;
   isUserOnline: (userId: string) => boolean;
 }
@@ -71,6 +72,7 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [lastMessage, setLastMessage] = useState<any | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectionAttempts = 5;
@@ -93,13 +95,43 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
 
   // Connect to WebSocket
   const connectWebSocket = useCallback((): (() => void) => {
-    // Only connect if we have a user and not in SSR
+    // Only connect if not in SSR
     if (typeof window === 'undefined') {
       return () => {}; // Return empty cleanup function
     }
 
-    // Skip if already initialized or no user
-    if (initializedRef.current || !user?._id) {
+    // Skip if already connected
+    if (socketRef.current?.connected) {
+      console.log('[WebSocket] Already connected, skipping reconnection');
+      return () => {}; // Return empty cleanup function
+    }
+
+    // Get token and parse user ID from JWT
+    const authToken = localStorage.getItem('token');
+    if (!authToken) {
+      console.warn('[WebSocket] No auth token found, cannot connect');
+      return () => {}; // Return empty cleanup function
+    }
+
+    // Parse user ID from JWT token
+    let userId = user?._id;
+    if (!userId && authToken) {
+      try {
+        const payload = authToken.split('.')[1];
+        const decoded = JSON.parse(atob(payload));
+        userId = decoded?.id || decoded?._id;
+        if (userId) {
+          console.log('[WebSocket] Extracted user ID from JWT:', userId);
+          // Store the user ID for future reconnections
+          localStorage.setItem('userId', userId);
+        }
+      } catch (error) {
+        console.error('[WebSocket] Error parsing JWT token:', error);
+      }
+    }
+
+    if (!userId) {
+      console.warn('[WebSocket] No user ID available, cannot connect');
       return () => {}; // Return empty cleanup function
     }
     
@@ -117,11 +149,11 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       return () => {}; // Return empty cleanup function
     }
 
-    // Get the WebSocket URL from environment variables or use default
+    // Get the WebSocket URL from environment variables
     const wsUrl = import.meta.env.VITE_WS_URL || 
-                 (import.meta.env.VITE_API_URL ? 
-                   import.meta.env.VITE_API_URL.replace(/^http/, 'ws') : 
-                   'ws://localhost:3001');
+                 (import.meta.env.VITE_API_BASE_URL ? 
+                   import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws').replace('/api', '') : 
+                   'ws://localhost:3000');
     
     console.log(`[WebSocket] Connecting to: ${wsUrl}`);
     
@@ -146,7 +178,8 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       query: {
         _t: Date.now(),
         clientType: 'web',
-        userId: user._id || 'unknown'
+        token: token,
+        userId: userId || 'unknown'
       }
     });
 
@@ -189,6 +222,26 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
     socket.on('connect_error', onConnectError);
     socket.on('userStatus', onUserStatus);
 
+    // Handle new incoming messages
+    const onNewMessage = (message: any) => {
+      console.log('[WebSocket] New message received in context:', {
+        id: message._id,
+        from: message.senderId,
+        to: message.recipientId,
+        content: message.content ? `${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}` : 'No content',
+        timestamp: message.timestamp || new Date().toISOString()
+      });
+      
+      // Store the last message in state
+      setLastMessage(message);
+      
+      // Also emit a global event for backward compatibility
+      window.dispatchEvent(new CustomEvent('newMessage', { detail: message }));
+    };
+
+    // Set up event listeners
+    socket.on('newMessage', onNewMessage);
+    
     // Cleanup function
     return () => {
       console.log('[WebSocket] Cleaning up WebSocket connection');
@@ -196,6 +249,7 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       socket.off('disconnect', onDisconnect);
       socket.off('connect_error', onConnectError);
       socket.off('userStatus', onUserStatus);
+      socket.off('newMessage', onNewMessage);
       
       if (socket.connected) {
         socket.disconnect();
@@ -242,13 +296,14 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
   }, [isConnected, user?._id, connectWebSocket, maxReconnectionAttempts]);
 
   // Context value
-  const contextValue = useMemo<WebSocketContextType>(() => ({
+  const contextValue = React.useMemo(() => ({
     socket: socketRef.current,
     isConnected,
     onlineUsers,
+    lastMessage,
     sendMessage,
-    isUserOnline,
-  }), [isConnected, onlineUsers, sendMessage, isUserOnline]);
+    isUserOnline
+  }), [isConnected, onlineUsers, lastMessage, sendMessage, isUserOnline]);
 
   return (
     <WebSocketContext.Provider value={contextValue}>

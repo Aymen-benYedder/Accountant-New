@@ -122,4 +122,41 @@ router.post('/', jwtAuth, async (req, res) => {
   }
 });
 
+// Mark messages as read
+router.post('/mark-as-read', jwtAuth, async (req, res) => {
+  const { messageIds } = req.body;
+  
+  if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+    return res.status(400).json({ error: 'messageIds array is required' });
+  }
+
+  try {
+    // Update all messages that belong to the current user and are unread
+    const result = await Message.updateMany(
+      {
+        _id: { $in: messageIds },
+        recipientId: req.user.id,
+        read: { $ne: true }
+      },
+      { $set: { read: true, readAt: new Date() } }
+    );
+
+    // If no messages were updated, they might already be read or not belong to user
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ 
+        error: 'No unread messages found with the provided IDs',
+        details: 'Messages may already be read or not belong to the user'
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      updatedCount: result.modifiedCount 
+    });
+  } catch (err) {
+    console.error('Error marking messages as read:', err);
+    res.status(500).json({ error: 'Failed to mark messages as read' });
+  }
+});
+
 module.exports = router;

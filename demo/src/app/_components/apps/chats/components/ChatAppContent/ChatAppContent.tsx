@@ -47,8 +47,9 @@ const ChatAppContent = () => {
   // Use proper type for JumboScrollbar ref
   const scrollRef = React.useRef<Scrollbars>(null);
 
-  const { socket, isConnected, sendMessage: wsSendMessage } = useWebSocket();
+  const { socket, isConnected, sendMessage: wsSendMessage, lastMessage } = useWebSocket();
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+  const lastMessageRef = React.useRef<any>(null);
 
   const reloadMessages = React.useCallback(() => {
     if (!id) return;
@@ -75,15 +76,25 @@ const ChatAppContent = () => {
     if (unreadMessages.length > 0) {
       try {
         const messageIds = unreadMessages.map((msg: any) => msg._id);
+        const token = localStorage.getItem('token');
         
-        await fetch(`${import.meta.env.VITE_API_URL}/api/messages/mark-as-read`, {
+        if (!token) {
+          console.error('No authentication token found');
+          return;
+        }
+        
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/messages/mark-as-read`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getCurrentUserJwt()}`
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ messageIds })
         });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to mark messages as read: ${response.statusText}`);
+        }
 
         // Update local state
         setMessages((prevMessages: any[]) => 
@@ -158,103 +169,94 @@ const ChatAppContent = () => {
     scrollToBottom('smooth');
   }, [messages, scrollToBottom]);
 
-  // Handle new messages from WebSocket
+  // Handle new messages from WebSocket context
   React.useEffect(() => {
-    if (!socket || !id) return;
-
-    const handleNewMessage = (newMessage: any) => {
-      // Ensure we have all required fields and properly format the timestamp
-      const message = {
-        ...newMessage,
-        _id: newMessage._id || `temp-${Date.now()}`,
-        sent_by: newMessage.sent_by || newMessage.senderId, // Support both formats
-        recipientId: newMessage.recipientId?.toString(),
-        content: newMessage.content,
-        timestamp: newMessage.timestamp ? 
-          (typeof newMessage.timestamp === 'string' ? newMessage.timestamp : new Date(newMessage.timestamp).toISOString()) : 
-          new Date().toISOString(),
-        status: 'delivered',
-        read: (newMessage.sent_by === currentUserId || newMessage.senderId === currentUserId) || (newMessage.read || false)
-      };
-
-      console.log(`[ChatAppContent] Received newMessage event:`, {
-        messageId: message._id,
-        from: message.senderId,
-        to: message.recipientId,
-        taskId: message.taskId,
-        timestamp: message.timestamp,
-        content: message.content ? `${message.content.substring(0, 30)}...` : 'No content',
-        currentConversation: id,
-        isCurrentTask: chatBy ? message.taskId === chatBy : 'no task filter'
-      });
-
-      // Check if this message is part of the current conversation
-      const senderId = message.sent_by || message.senderId;
-      const isDirectMessage = chatBy === 'contact' && 
-        ((senderId === id && message.recipientId === currentUserId) ||
-         (senderId === currentUserId && message.recipientId === id));
-      
-      const isTaskMessage = chatBy && chatBy !== 'contact' && 
-        message.taskId === chatBy &&
-        (senderId === id || message.recipientId === id);
-      
-      const isCurrentConversation = isDirectMessage || isTaskMessage;
-      
-      console.log(`[ChatAppContent] Message is ${isCurrentConversation ? '' : 'NOT '}part of current conversation`, {
-        messageId: message._id,
-        from: message.senderId,
-        to: message.recipientId,
-        currentUserId,
-        conversationId: id,
-        chatBy,
-        isDirectMessage,
-        isTaskMessage
-      });
-      
-      if (isCurrentConversation) {
-        setMessages(prevMessages => {
-          // Check if message already exists to avoid duplicates
-          const exists = prevMessages.some((msg: any) => {
-            const msgSenderId = msg.sent_by || msg.senderId;
-            const newMsgSenderId = message.sent_by || message.senderId;
-            return msg._id === message._id || 
-              (msg.status === 'sending' && msg.content === message.content && msgSenderId === newMsgSenderId);
-          });
-          
-          if (exists) {
-            console.log(`[ChatAppContent] Message exists, updating in place`);
-            return prevMessages.map((msg: any) => 
-              (msg._id === message._id || 
-               (msg.status === 'sending' && msg.content === message.content && (msg.sent_by || msg.senderId) === (message.sent_by || message.senderId)))
-                ? { ...message, status: 'delivered' }
-                : msg
-            );
-          }
-          
-          console.log(`[ChatAppContent] Adding new message to UI`);
-          return [...prevMessages, message];
-        });
-
-        // Always scroll to bottom for both sender and receiver when a new message arrives
-        scrollToBottom();
-
-        // If this is a message from the other user, mark it as read
-        if ((message.sent_by || message.senderId) !== currentUserId) {
-          markMessagesAsRead();
-        }
-      }
-    };
-
-    // Scroll helper function removed - was unused
-
-    socket.on('newMessage', handleNewMessage);
+    if (!lastMessage || !id) return;
     
-    // Clean up the event listener when component unmounts or conversation changes
-    return () => {
-      console.log(`[ChatAppContent] Cleaning up WebSocket listener for user: ${id}`);
-      socket.off('newMessage', handleNewMessage);
+    // Skip if we've already processed this message
+    if (lastMessageRef.current?._id === lastMessage?._id) return;
+    
+    // Store the last processed message
+    lastMessageRef.current = lastMessage;
+    
+    // Process the new message
+    const newMessage = {
+      ...lastMessage,
+      _id: lastMessage._id || `temp-${Date.now()}`,
+      sent_by: lastMessage.sent_by || lastMessage.senderId,
+      recipientId: lastMessage.recipientId?.toString(),
+      content: lastMessage.content,
+      timestamp: lastMessage.timestamp || new Date().toISOString(),
+      status: 'delivered',
+      read: (lastMessage.sent_by === currentUserId || lastMessage.senderId === currentUserId) || (lastMessage.read || false)
     };
-  }, [socket, id, chatBy, currentUserId, markMessagesAsRead, scrollToBottom]);
+
+    console.log(`[ChatAppContent] Processing new message from context:`, {
+      messageId: newMessage._id,
+      from: newMessage.senderId,
+      to: newMessage.recipientId,
+      content: newMessage.content ? `${newMessage.content.substring(0, 30)}...` : 'No content',
+      currentConversation: id,
+      isCurrentTask: chatBy ? newMessage.taskId === chatBy : 'no task filter'
+    });
+
+    // Check if this message is part of the current conversation
+    const senderId = newMessage.sent_by || newMessage.senderId;
+    const isDirectMessage = chatBy === 'contact' && 
+      ((senderId === id && newMessage.recipientId === currentUserId) ||
+       (senderId === currentUserId && newMessage.recipientId === id));
+    
+    const isTaskMessage = chatBy && chatBy !== 'contact' && 
+      newMessage.taskId === chatBy &&
+      (senderId === id || newMessage.recipientId === id);
+    
+    const isCurrentConversation = isDirectMessage || isTaskMessage;
+    
+    console.log(`[ChatAppContent] Message is ${isCurrentConversation ? '' : 'NOT '}part of current conversation`, {
+      messageId: newMessage._id,
+      from: newMessage.senderId,
+      to: newMessage.recipientId,
+      currentUserId,
+      conversationId: id,
+      chatBy,
+      isDirectMessage,
+      isTaskMessage
+    });
+    
+    if (isCurrentConversation) {
+      setMessages(prevMessages => {
+        // Check if message already exists to avoid duplicates
+        const exists = prevMessages.some((msg: any) => {
+          const msgSenderId = msg.sent_by || msg.senderId;
+          const newMsgSenderId = newMessage.sent_by || newMessage.senderId;
+          return msg._id === newMessage._id || 
+            (msg.status === 'sending' && msg.content === newMessage.content && msgSenderId === newMsgSenderId);
+        });
+        
+        if (exists) {
+          console.log(`[ChatAppContent] Message exists, updating in place`);
+          return prevMessages.map((msg: any) => 
+            (msg._id === newMessage._id || 
+             (msg.status === 'sending' && msg.content === newMessage.content && 
+              (msg.sent_by || msg.senderId) === (newMessage.sent_by || newMessage.senderId)))
+              ? { ...newMessage, status: 'delivered' }
+              : msg
+          );
+        }
+        
+        console.log(`[ChatAppContent] Adding new message to UI`);
+        return [...prevMessages, newMessage];
+      });
+
+      // Always scroll to bottom for both sender and receiver when a new message arrives
+      scrollToBottom();
+
+      // If this is a message from the other user, mark it as read
+      if ((newMessage.sent_by || newMessage.senderId) !== currentUserId) {
+        markMessagesAsRead();
+      }
+    }
+  }, [lastMessage, id, chatBy, currentUserId, markMessagesAsRead, scrollToBottom]);
 
   // Handle sending a new message
   const handleSend = React.useCallback(async (content: string) => {
