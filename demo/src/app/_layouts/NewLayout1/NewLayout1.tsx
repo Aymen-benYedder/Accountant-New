@@ -18,7 +18,6 @@ export function NewLayout1() {
           footer={<Footer />}
           sidebar={<Sidebar menus={layout1Menus} />}
         >
-          "layout is this"
           <Outlet />
         </JumboLayout>
       </JumboLayoutProvider>
