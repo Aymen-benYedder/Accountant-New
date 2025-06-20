@@ -2,10 +2,7 @@ import React from "react";
 import { Box, Chip, Typography } from "@mui/material";
 import { SentMessageContent } from "../SentMessageContent";
 import { ReceivedMessageContent } from "../ReceivedMessageContent";
-import { MessagesProps } from "@app/_components/apps/_types/ChatTypes";
-
-// Union of specific status values we expect, plus any string for backward compatibility
-type MessageStatus = 'sending' | 'delivered' | 'error' | string;
+import { MessagesProps, MessageStatus } from "@app/_components/apps/_types/ChatTypes";
 
 // Enhanced message type that makes content required and handles status properly
 type EnhancedMessageProps = Omit<MessagesProps, 'status' | 'content'> & {
@@ -147,7 +144,7 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
               <ReceivedMessageContent 
                 message={{
                   ...message,
-                  status: message.status || 'received' // Ensure status is always passed
+status: message.status || 'received' // Ensure status is always passed
                 }}
                 senderName={senderName}
               />

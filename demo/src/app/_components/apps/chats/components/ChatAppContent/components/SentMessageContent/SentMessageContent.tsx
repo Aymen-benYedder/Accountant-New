@@ -1,8 +1,7 @@
 import React, { useEffect } from "react";
 import { Box, Typography, Paper, Tooltip } from "@mui/material";
 import { format } from 'date-fns';
-
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error' | string;
+import { MessageStatus } from "@app/_components/apps/_types/ChatTypes";
 
 // Debug helper to log props changes
 const useDebugLog = (name: string, props: any) => {
@@ -74,12 +73,11 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
       'delivered': { text: 'Delivered', icon: '✓✓' },
       'read': { text: 'Read', icon: '✓✓', readAt: readAt },
       'error': { text: 'Error', icon: '⚠️' }
-    };
+    } as const;
     
-    const config = statusConfig[status] || { 
-      text: status.charAt(0).toUpperCase() + status.slice(1),
-      icon: '?'
-    };
+    type StatusKey = keyof typeof statusConfig;
+    const safeStatus: StatusKey = status in statusConfig ? status as StatusKey : 'error';
+    const config = statusConfig[safeStatus];
     
     const statusText = config.text;
     const statusIcon = config.icon;
@@ -87,6 +85,7 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
     // Styling based on status
     const statusStyles = {
       'sending': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
+      'received': { color: 'rgba(0, 0, 0, 0.6)', bgColor: 'rgba(0, 0, 0, 0.05)' },
       'error': { color: '#ff6b6b', bgColor: 'rgba(255, 76, 81, 0.1)' },
       'read': { color: '#4caf50', bgColor: 'rgba(76, 175, 80, 0.1)' },
       'delivered': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },

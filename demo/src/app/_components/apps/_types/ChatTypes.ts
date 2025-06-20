@@ -4,6 +4,8 @@ interface UserProps {
   profile_pic: string;
   status: string;
 }
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error' | 'received';
+
 interface MessagesProps {
   senderId?: any; // Made optional to match mock data
   id: number | string;
@@ -18,7 +20,7 @@ interface MessagesProps {
   read?: boolean;
   sent_by: number; // This is the actual field used in mock data
   recipientId?: string | number;
-  status?: string;
+  status?: MessageStatus;
   taskId?: string;
 }
 interface ConversationProps {
