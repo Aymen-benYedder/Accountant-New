@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { resolve } from 'path';
+import fs from 'fs';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -26,13 +27,22 @@ export default defineConfig({
     }
   },
   server: {
+    https: {
+      key: fs.readFileSync(resolve(__dirname, '../certs/localhost.key')),
+      cert: fs.readFileSync(resolve(__dirname, '../certs/localhost.crt')),
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://localhost:3001',
         changeOrigin: true,
         secure: false,
         ws: true,
       },
+      '/ws': {
+        target: 'wss://localhost:3001',
+        ws: true,
+        secure: false
+      }
     }
   },
 });

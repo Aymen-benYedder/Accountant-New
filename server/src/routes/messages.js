@@ -125,12 +125,31 @@ router.post('/', jwtAuth, async (req, res) => {
 // Mark messages as read
 router.post('/mark-as-read', jwtAuth, async (req, res) => {
   const { messageIds } = req.body;
+  const io = req.app.get('io');
+  const userSockets = req.app.get('userSockets');
   
   if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
     return res.status(400).json({ error: 'messageIds array is required' });
   }
 
   try {
+    // First find the messages to get sender information
+    const messages = await Message.find({
+      _id: { $in: messageIds },
+      recipientId: req.user.id,
+      read: { $ne: true }
+    }).populate('senderId', 'id');
+
+    if (messages.length === 0) {
+      return res.status(404).json({ 
+        error: 'No unread messages found with the provided IDs',
+        details: 'Messages may already be read or not belong to the user'
+      });
+    }
+
+    // Get unique sender IDs
+    const senderIds = [...new Set(messages.map(msg => msg.senderId?.id?.toString()).filter(Boolean))];
+
     // Update all messages that belong to the current user and are unread
     const result = await Message.updateMany(
       {
@@ -141,17 +160,29 @@ router.post('/mark-as-read', jwtAuth, async (req, res) => {
       { $set: { read: true, readAt: new Date() } }
     );
 
-    // If no messages were updated, they might already be read or not belong to user
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ 
-        error: 'No unread messages found with the provided IDs',
-        details: 'Messages may already be read or not belong to the user'
-      });
-    }
+    // Get the updated messages with full details
+    const updatedMessages = await Message.find({
+      _id: { $in: messageIds },
+      recipientId: req.user.id
+    }).populate('senderId', 'name email');
+
+    // Notify all senders that their messages were read
+    senderIds.forEach(senderId => {
+      if (userSockets[senderId]) {
+        userSockets[senderId].forEach(socketId => {
+          io.to(socketId).emit('messagesRead', {
+            messageIds: updatedMessages.map(m => m._id),
+            readerId: req.user.id,
+            timestamp: new Date()
+          });
+        });
+      }
+    });
 
     res.json({ 
       success: true, 
-      updatedCount: result.modifiedCount 
+      updatedCount: result.modifiedCount,
+      messageIds: updatedMessages.map(m => m._id)
     });
   } catch (err) {
     console.error('Error marking messages as read:', err);

@@ -145,7 +145,10 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
               </div>
             ) : (
               <ReceivedMessageContent 
-                message={message}
+                message={{
+                  ...message,
+                  status: message.status || 'received' // Ensure status is always passed
+                }}
                 senderName={senderName}
               />
             )}

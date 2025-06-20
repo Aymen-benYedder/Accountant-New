@@ -6,10 +6,12 @@ dotenv.config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const https = require('https');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require("jsonwebtoken");
 const path = require('path');
+const fs = require('fs');
 
 const authRoutes = require('./src/routes/auth');
 const clientsRoutes = require('./src/routes/clients');
@@ -25,10 +27,14 @@ const app = express();
 // Enable CORS for all routes
 app.use(cors({
   origin: [
-    'http://localhost:3000', 
-    'http://127.0.0.1:3000', 
+    'http://localhost:3000',
+    'https://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://127.0.0.1:3000',
     'http://localhost:5173',
+    'https://localhost:5173',
     'http://127.0.0.1:5173',
+    'https://127.0.0.1:5173',
     'https://accountant-new.onrender.com',
     'https://accountant-frontend.onrender.com'
   ],
@@ -43,13 +49,41 @@ app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 // Handle preflight requests
 app.options('*', cors());
 
-const server = http.createServer(app);
+// HTTPS options
+const httpsOptions = {
+  key: fs.readFileSync(path.join(__dirname, '../certs/localhost.key')),
+  cert: fs.readFileSync(path.join(__dirname, '../certs/localhost.crt'))
+};
+
+// Create HTTPS server
+const server = https.createServer(httpsOptions, app);
 
 const io = new Server(server, {
   cors: {
-    origin: ['*', 'http://localhost:5173'],
+    origin: [
+      'http://localhost:3000',
+      'https://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://127.0.0.1:3000',
+      'http://localhost:5173',
+      'https://localhost:5173',
+      'http://127.0.0.1:5173',
+      'https://127.0.0.1:5173',
+      'https://accountant-new.onrender.com',
+      'https://accountant-frontend.onrender.com'
+    ],
     methods: ['GET', 'POST'],
-  }
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  perMessageDeflate: {
+    threshold: 1024,
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true
+  },
+  pingTimeout: 30000,
+  pingInterval: 25000
 });
 
 const User = require("./src/models/User");

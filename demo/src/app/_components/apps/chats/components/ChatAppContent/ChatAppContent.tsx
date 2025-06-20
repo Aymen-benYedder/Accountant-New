@@ -32,7 +32,9 @@ function getCurrentUserJwt(): { userId: string | null, role: string | null } {
 }
 
 console.log("[ChatAppContent top-level] getCurrentUserJwt():", getCurrentUserJwt());
-console.log('API_BASE_URL =', import.meta.env.VITE_API_BASE_URL);
+console.log('VITE_API_URL:', import.meta.env.VITE_API_URL);
+console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+console.log('All env vars:', import.meta.env);
 
 const ChatAppContent = () => {
   const params = useParams();
@@ -64,50 +66,56 @@ const ChatAppContent = () => {
     });
   }, [id]);
 
-  // Set up WebSocket listener for new messages
   // Mark messages as read when they become visible
   const markMessagesAsRead = React.useCallback(async () => {
-    if (!messages) return;
+    if (!messages || !messages.length) {
+      console.log('[markMessagesAsRead] No messages to mark as read');
+      return;
+    }
     
+    // Find all unread messages for the current user
     const unreadMessages = messages.filter(
-      (msg: any) => !msg.read && msg.recipientId === currentUserId
+      (msg: any) => !msg.read && 
+                  msg.recipientId === currentUserId &&
+                  msg.senderId !== currentUserId // Don't mark our own sent messages as read
     );
 
-    if (unreadMessages.length > 0) {
-      try {
-        const messageIds = unreadMessages.map((msg: any) => msg._id);
-        const token = localStorage.getItem('token');
-        
-        if (!token) {
-          console.error('No authentication token found');
-          return;
-        }
-        
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/messages/mark-as-read`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ messageIds })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to mark messages as read: ${response.statusText}`);
-        }
+    if (unreadMessages.length === 0) {
+      console.log('[markMessagesAsRead] No unread messages to mark');
+      return;
+    }
 
-        // Update local state
-        setMessages((prevMessages: any[]) => 
-          prevMessages.map(msg => 
-            messageIds.includes(msg._id) ? { ...msg, read: true } : msg
-          )
+    const messageIds = unreadMessages.map((msg: any) => msg._id);
+    console.log(`[markMessagesAsRead] Marking ${messageIds.length} messages as read`);
+
+    try {
+      // Use the existing API client which already has auth headers
+      const response = await api.post('/messages/mark-as-read', { messageIds });
+      
+      console.log(`[markMessagesAsRead] Successfully marked ${response.data?.updatedCount || 0} messages as read`);
+      
+      // The WebSocket event will handle the UI update, but we'll update optimistically
+      // to make the UI feel more responsive
+      setMessages(prevMessages => {
+        const updatedMessages = prevMessages.map(msg => 
+          messageIds.includes(msg._id) 
+            ? { ...msg, read: true, status: 'read' }
+            : msg
         );
-        
-        // Update unread count
-        setUnreadCount(0);
-      } catch (error) {
-        console.error('Error marking messages as read:', error);
-      }
+        return updatedMessages;
+      });
+      
+      // Update unread count
+      setUnreadCount(prev => Math.max(0, prev - messageIds.length));
+      
+    } catch (error) {
+      console.error('[markMessagesAsRead] Error:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        messageIds,
+        currentUserId
+      });
+      
+      // Optionally, you could retry or show an error message to the user
     }
   }, [messages, currentUserId]);
 
@@ -169,12 +177,70 @@ const ChatAppContent = () => {
     scrollToBottom('smooth');
   }, [messages, scrollToBottom]);
 
+  // Handle messages being marked as read via WebSocket
+  React.useEffect(() => {
+    if (!socket) return;
+
+    const handleMessagesRead = (data: { messageIds: string[], readerId: string }) => {
+      console.log('[ChatAppContent] messagesRead event received:', data);
+      
+      // Only update if the current user is the sender of these messages
+      // and the messages are in the current conversation
+      setMessages(prevMessages => {
+        const updatedMessages = prevMessages.map(msg => {
+          if (data.messageIds.includes(msg._id) && 
+              msg.senderId === currentUserId && 
+              msg.recipientId === data.readerId) {
+            console.log(`[ChatAppContent] Marking message as read:`, {
+              messageId: msg._id,
+              previousStatus: msg.status,
+              newStatus: 'read',
+              timestamp: new Date().toISOString()
+            });
+            return { ...msg, read: true, status: 'read' };
+          }
+          return msg;
+        });
+        
+        // Check if any messages were actually updated
+        const updatedCount = updatedMessages.filter(msg => 
+          data.messageIds.includes(msg._id) && 
+          msg.senderId === currentUserId && 
+          msg.recipientId === data.readerId
+        ).length;
+        
+        if (updatedCount > 0) {
+          console.log(`[ChatAppContent] Updated ${updatedCount} messages to read status`);
+        }
+        
+        return updatedMessages;
+      });
+    };
+
+    socket.on('messagesRead', handleMessagesRead);
+
+    return () => {
+      if (socket) {
+        socket.off('messagesRead', handleMessagesRead);
+      }
+    };
+  }, [socket, currentUserId]);
+
   // Handle new messages from WebSocket context
   React.useEffect(() => {
     if (!lastMessage || !id) return;
     
     // Skip if we've already processed this message
     if (lastMessageRef.current?._id === lastMessage?._id) return;
+    
+    console.log('[ChatAppContent] New WebSocket message received:', {
+      messageId: lastMessage._id,
+      from: lastMessage.sent_by || lastMessage.senderId,
+      to: lastMessage.recipientId,
+      status: lastMessage.status,
+      read: lastMessage.read,
+      content: lastMessage.content ? `${lastMessage.content.substring(0, 30)}...` : 'No content'
+    });
     
     // Store the last processed message
     lastMessageRef.current = lastMessage;
@@ -187,9 +253,17 @@ const ChatAppContent = () => {
       recipientId: lastMessage.recipientId?.toString(),
       content: lastMessage.content,
       timestamp: lastMessage.timestamp || new Date().toISOString(),
-      status: 'delivered',
-      read: (lastMessage.sent_by === currentUserId || lastMessage.senderId === currentUserId) || (lastMessage.read || false)
+      // Use the status from the message if provided, otherwise default to 'delivered'
+      status: lastMessage.status || 'delivered',
+      read: lastMessage.read || (lastMessage.sent_by === currentUserId || lastMessage.senderId === currentUserId)
     };
+    
+    console.log('[ChatAppContent] Processed message status:', {
+      messageId: newMessage._id,
+      status: newMessage.status,
+      read: newMessage.read,
+      isOwnMessage: (newMessage.sent_by === currentUserId || newMessage.senderId === currentUserId)
+    });
 
     console.log(`[ChatAppContent] Processing new message from context:`, {
       messageId: newMessage._id,
@@ -270,6 +344,12 @@ const ChatAppContent = () => {
       console.log('[ChatAppContent] Empty message, not sending');
       return;
     }
+    
+    console.log('[ChatAppContent] Sending message:', {
+      to: id,
+      content: `${trimmedContent.substring(0, 30)}${trimmedContent.length > 30 ? '...' : ''}`,
+      timestamp: new Date().toISOString()
+    });
     
     const messageData = {
       taskId: chatBy || undefined,

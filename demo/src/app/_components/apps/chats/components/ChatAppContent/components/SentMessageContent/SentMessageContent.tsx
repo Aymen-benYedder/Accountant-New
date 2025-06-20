@@ -1,10 +1,18 @@
-import React from "react";
-import { Box, Typography, Paper } from "@mui/material";
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import React, { useEffect } from "react";
+import { Box, Typography, Paper, Tooltip } from "@mui/material";
+import { format } from 'date-fns';
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error' | string;
+
+// Debug helper to log props changes
+const useDebugLog = (name: string, props: any) => {
+  useEffect(() => {
+    console.log(`[${new Date().toISOString()}] ${name} mounted/updated:`, props);
+    return () => {
+      console.log(`[${new Date().toISOString()}] ${name} unmounted`);
+    };
+  }, [props, name]);
+};
 
 interface SentMessageContentProps {
   message: {
@@ -22,30 +30,126 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
   senderName,
   status: propStatus
 }) => {
+  // Debug logging
+  useDebugLog('SentMessageContent', { 
+    messageId: message._id || 'unknown',
+    status: propStatus || message.status,
+    content: message.content?.substring(0, 30) + (message.content?.length > 30 ? '...' : '')
+  });
+  
   const status = propStatus || message.status || 'sent';
+  const readAt = message.readAt ? new Date(message.readAt) : null;
   
   // Format the timestamp
-  const formatTimestamp = (timestamp?: string | Date): string => {
+  const formatTimestamp = (timestamp?: string | Date, includeDate = false): string => {
     if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    
+    if (isNaN(date.getTime())) return 'Invalid date';
+    
+    try {
+      if (includeDate) {
+        return format(date, 'MMM d, yyyy h:mm a');
+      }
+      return format(date, 'h:mm a');
+    } catch (error) {
+      console.error('Error formatting timestamp:', { timestamp, error });
+      return 'Invalid date';
+    }
   };
 
-  // Get status icon
-  const getStatusIcon = () => {
-    switch (status) {
-      case 'sending':
-        return <AccessTimeIcon color="disabled" sx={{ fontSize: '1rem', ml: 0.5 }} />;
-      case 'error':
-        return <ErrorIcon color="error" sx={{ fontSize: '1rem', ml: 0.5 }} />;
-      case 'read':
-        return <CheckCircleIcon color="primary" sx={{ fontSize: '1rem', ml: 0.5 }} />;
-      case 'delivered':
-      case 'sent':
-        return <CheckCircleIcon color="action" sx={{ fontSize: '1rem', ml: 0.5 }} />;
-      default:
-        return null;
+  // Get status text with appropriate styling
+  const getStatusText = () => {
+    // Debug log status changes
+    console.log(`[${new Date().toISOString()}] Status update for message ${message._id || 'unknown'}:`, {
+      previousStatus: message.status,
+      newStatus: status,
+      readAt: message.readAt ? new Date(message.readAt).toISOString() : 'Not read'
+    });
+    
+    // Map status to display text and icons
+    const statusConfig = {
+      'sending': { text: 'Sending...', icon: '🕒' },
+      'sent': { text: 'Sent', icon: '✓' },
+      'delivered': { text: 'Delivered', icon: '✓✓' },
+      'read': { text: 'Read', icon: '✓✓', readAt: readAt },
+      'error': { text: 'Error', icon: '⚠️' }
+    };
+    
+    const config = statusConfig[status] || { 
+      text: status.charAt(0).toUpperCase() + status.slice(1),
+      icon: '?'
+    };
+    
+    const statusText = config.text;
+    const statusIcon = config.icon;
+    
+    // Styling based on status
+    const statusStyles = {
+      'sending': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
+      'error': { color: '#ff6b6b', bgColor: 'rgba(255, 76, 81, 0.1)' },
+      'read': { color: '#4caf50', bgColor: 'rgba(76, 175, 80, 0.1)' },
+      'delivered': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
+      'sent': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
+    }[status] || { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' };
+    
+    // Create the status content with tooltip
+    const statusContent = (
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          bgcolor: statusStyles.bgColor,
+          borderRadius: 1,
+          px: 0.75,
+          py: 0.25,
+          ml: 0.5,
+          cursor: 'help'
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{
+            color: statusStyles.color,
+            fontSize: '0.65rem',
+            lineHeight: 1.2,
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5
+          }}
+        >
+          <span>{statusIcon}</span>
+          <span>{statusText}</span>
+        </Typography>
+      </Box>
+    );
+
+    // Add tooltip for read messages to show when it was read
+    if (status === 'read' && readAt) {
+      return (
+        <Tooltip 
+          title={`Read at ${format(readAt, 'MMM d, yyyy h:mm a')}`}
+          arrow
+          placement="left"
+        >
+          {statusContent}
+        </Tooltip>
+      );
     }
+
+    // Add tooltip for other statuses
+    const tooltipTitle = status === 'sent' && message.timestamp
+      ? `Sent at ${formatTimestamp(message.timestamp, true)}`
+      : statusText;
+
+    return (
+      <Tooltip title={tooltipTitle} arrow placement="left">
+        {statusContent}
+      </Tooltip>
+    );
   };
 
   return (
@@ -128,7 +232,7 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
             >
               {formatTimestamp(message.timestamp || message.sent_at)}
             </Typography>
-            {getStatusIcon()}
+            {getStatusText()}
           </Box>
         </Paper>
       </Box>

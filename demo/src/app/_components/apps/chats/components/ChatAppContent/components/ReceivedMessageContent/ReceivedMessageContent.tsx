@@ -7,6 +7,7 @@ interface ReceivedMessageContentProps {
     content: string;
     timestamp?: string | Date;
     sent_at?: string | Date;
+    status?: string;
   };
   senderName: string;
 }
@@ -75,13 +76,45 @@ const ReceivedMessageContent: React.FC<ReceivedMessageContentProps> = ({
             {message.content}
           </Typography>
         </Box>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ mt: 0.5, alignSelf: 'flex-start' }}
-        >
-          {formatTimestamp(message.timestamp || message.sent_at || undefined)}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, alignSelf: 'flex-start' }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              fontSize: '0.7rem',
+              opacity: 0.8
+            }}
+          >
+            {formatTimestamp(message.timestamp || message.sent_at || undefined)}
+          </Typography>
+          {message.status === 'received' && (
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                bgcolor: 'rgba(0, 0, 0, 0.05)',
+                borderRadius: 1,
+                px: 0.75,
+                py: 0.25,
+                ml: 0.5
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'rgba(0, 0, 0, 0.7)',
+                  fontSize: '0.65rem',
+                  lineHeight: 1.2,
+                  fontWeight: 500,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}
+              >
+                Received
+              </Typography>
+            </Box>
+          )}
+        </Box>
       </Box>
     </Box>
   );
