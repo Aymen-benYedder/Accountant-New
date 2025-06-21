@@ -588,15 +588,25 @@ const [users, setUsers] = useState<BackendUser[]>([]);
                 <InputLabel>{t("form.role", "Role")}</InputLabel>
                 <Select
                   label={t("form.role", "Role")}
-                  value={formData.role}
-                  onChange={(e) =>
-                    handleFormChange("role", e.target.value as string)
-                  }
+                  value={currentUserRole === "accountant" ? "owner" : formData.role}
+                  onChange={(e) => {
+                    if (currentUserRole !== "accountant") {
+                      handleFormChange("role", e.target.value as string);
+                    }
+                  }}
+                  disabled={currentUserRole === "accountant"}
                 >
-                  <MenuItem value="user">{t("roles.user", "User")}</MenuItem>
-                  <MenuItem value="client">{t("roles.client", "Client")}</MenuItem>
-                  <MenuItem value="accountant">{t("roles.accountant", "Accountant")}</MenuItem>
-                  <MenuItem value="admin">{t("roles.admin", "Admin")}</MenuItem>
+                  {currentUserRole === "accountant" ? (
+                    <MenuItem value="owner">{t("roles.owner", "Owner")}</MenuItem>
+                  ) : (
+                    <>
+                      <MenuItem value="user">{t("roles.user", "User")}</MenuItem>
+                      <MenuItem value="client">{t("roles.client", "Client")}</MenuItem>
+                      <MenuItem value="owner">{t("roles.owner", "Owner")}</MenuItem>
+                      <MenuItem value="accountant">{t("roles.accountant", "Accountant")}</MenuItem>
+                      <MenuItem value="admin">{t("roles.admin", "Admin")}</MenuItem>
+                    </>
+                  )}
                 </Select>
               </FormControl>
               {/* Companies multi-select */}
