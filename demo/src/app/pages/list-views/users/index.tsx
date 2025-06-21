@@ -444,13 +444,15 @@ const [users, setUsers] = useState<BackendUser[]>([]);
           companies: formData.companies,
         });
       } else {
-        await api.post<BackendUser>("/users", {
+        const userData = {
           name: formData.name,
           email: formData.email,
-          role: formData.role,
+          role: currentUserRole === "accountant" ? "owner" : formData.role,
           password: formData.password,
           companies: formData.companies,
-        });
+        };
+        
+        await api.post<BackendUser>("/users", userData);
       }
       closeDialog();
       await fetchUsers();
