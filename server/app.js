@@ -23,36 +23,86 @@ const companiesRoutes = require('./src/routes/companies');
 
 const app = express();
 
-// Proper CORS configuration
+// Enhanced CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://127.0.0.1:3000',
+  'http://localhost:5173',
+  'https://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://127.0.0.1:5173',
+  'https://accountant-new.onrender.com',
+  'https://accountant-frontend.onrender.com'
+];
+
+// Configure CORS with enhanced options
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'https://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://127.0.0.1:3000',
-    'http://localhost:5173',
-    'https://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://127.0.0.1:5173',
-    'https://accountant-new.onrender.com',
-    'https://accountant-frontend.onrender.com'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+      console.warn(msg);
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
+// Apply CORS middleware
 app.use(cors(corsOptions));
+
+// Handle preflight requests
 app.options('*', cors(corsOptions));
+
+// Add headers for all responses
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 // Serve uploads statically from /uploads at root (http://localhost:3000/uploads/...)
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-// Create HTTP server (Render terminates HTTPS at the edge)
+// Create HTTP server
 const server = http.createServer(app);
 
+// Configure Socket.IO with CORS and authentication
 const io = new Server(server, {
-  cors: corsOptions,
+  cors: {
+    origin: function(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        console.warn(`Socket.IO connection blocked by CORS: ${origin}`);
+        return callback(new Error('Not allowed by CORS'), false);
+      }
+      return callback(null, true);
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+  },
   transports: ['websocket', 'polling'],
   allowUpgrades: true,
   perMessageDeflate: {
@@ -61,7 +111,30 @@ const io = new Server(server, {
     serverNoContextTakeover: true
   },
   pingTimeout: 30000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  cookie: false,
+  serveClient: false
+});
+
+// Socket.IO authentication middleware
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token || 
+                 (socket.handshake.headers?.authorization && 
+                  socket.handshake.headers.authorization.split(' ')[1]);
+    
+    if (!token) {
+      console.log('Socket.IO: No token provided');
+      return next(new Error('Authentication error: No token provided'));
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.user = decoded;
+    next();
+  } catch (error) {
+    console.error('Socket.IO authentication error:', error.message);
+    next(new Error('Authentication error: Invalid token'));
+  }
 });
 
 const User = require("./src/models/User");
