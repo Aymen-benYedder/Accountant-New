@@ -6,7 +6,6 @@ dotenv.config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const https = require('https');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require("jsonwebtoken");
@@ -24,8 +23,8 @@ const companiesRoutes = require('./src/routes/companies');
 
 const app = express();
 
-// Enable CORS for all routes
-app.use(cors({
+// Proper CORS configuration
+const corsOptions = {
   origin: [
     'http://localhost:3000',
     'https://localhost:3000',
@@ -41,40 +40,19 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
-}));
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Serve uploads statically from /uploads at root (http://localhost:3000/uploads/...)
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-// Handle preflight requests
-app.options('*', cors());
-
-// HTTPS options
-const httpsOptions = {
-  key: fs.readFileSync(path.join(__dirname, '../certs/localhost.key')),
-  cert: fs.readFileSync(path.join(__dirname, '../certs/localhost.crt'))
-};
-
-// Create HTTPS server
-const server = https.createServer(httpsOptions, app);
+// Create HTTP server (Render terminates HTTPS at the edge)
+const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: [
-      'http://localhost:3000',
-      'https://localhost:3000',
-      'http://127.0.0.1:3000',
-      'https://127.0.0.1:3000',
-      'http://localhost:5173',
-      'https://localhost:5173',
-      'http://127.0.0.1:5173',
-      'https://127.0.0.1:5173',
-      'https://accountant-new.onrender.com',
-      'https://accountant-frontend.onrender.com'
-    ],
-    methods: ['GET', 'POST'],
-    credentials: true
-  },
+  cors: corsOptions,
   transports: ['websocket', 'polling'],
   allowUpgrades: true,
   perMessageDeflate: {
@@ -90,11 +68,9 @@ const User = require("./src/models/User");
 const Message = require("./src/models/Message");
 const JWT_SECRET = process.env.JWT_SECRET || "devsecret";
 
-// Track all sockets per userId for robust disconnect handling
 const userSockets = {};
-const onlineUsers = new Set(); // Track online user IDs
+const onlineUsers = new Set();
 
-// Socket.io realtime connection tracking, robust for multi-tab/disconnect
 io.on('connection', async (socket) => {
   console.log('\n=== New Socket.io Connection ===');
   console.log(`[${new Date().toISOString()}] Socket ID: ${socket.id}`);
@@ -116,7 +92,7 @@ io.on('connection', async (socket) => {
   }
   
   console.log('[Socket.io] Extracted token:', token ? `${token.substring(0, 10)}...` : 'No token found');
-  
+
   let userId = null;
   try {
     if (token) {
@@ -134,16 +110,14 @@ io.on('connection', async (socket) => {
   } catch (e) {
     console.error('[Socket.io] JWT verification failed:', e.message || e);
   }
-  
+
   if (userId) {
-    // Add socket.id to this user's active socket list
     userSockets[userId] = userSockets[userId] || [];
     userSockets[userId].push(socket.id);
-    
+
     console.log(`[Socket.io] User ${userId} now has ${userSockets[userId].length} active connections`);
     console.log('Active sockets:', userSockets);
-    
-    // Mark user online
+
     try {
       onlineUsers.add(userId);
       await User.findByIdAndUpdate(userId, { 
@@ -151,30 +125,25 @@ io.on('connection', async (socket) => {
         lastSeen: new Date() 
       });
       console.log(`[Socket.io] Updated user ${userId} status to online`);
-      // Broadcast user online status to all connected clients
       io.emit('userStatus', { userId, isOnline: true });
     } catch (err) {
       console.error('[Socket.io] Error updating user status:', err);
     }
-    
-    // Listen for disconnect
+
     socket.on('disconnect', async () => {
       console.log(`\n[Socket.io] Socket ${socket.id} disconnected`);
-      
+
       if (userId) {
-        // Remove this socket from user's active sockets
         if (userSockets[userId]) {
           userSockets[userId] = userSockets[userId].filter(id => id !== socket.id);
-          
-          // If no more sockets for this user, mark as offline
+
           if (userSockets[userId].length === 0) {
             delete userSockets[userId];
             onlineUsers.delete(userId);
-            
+
             try {
               await User.findByIdAndUpdate(userId, { online: false, lastSeen: new Date() });
               console.log(`[Socket.io] Updated user ${userId} status to offline`);
-              // Broadcast user offline status to all connected clients
               io.emit('userStatus', { userId, isOnline: false });
             } catch (err) {
               console.error('[Socket.io] Error updating user status to offline:', err);
@@ -184,20 +153,17 @@ io.on('connection', async (socket) => {
       }
     });
 
-    // Handle getOnlineUsers request
     socket.on('getOnlineUsers', (callback) => {
       if (typeof callback === 'function') {
         callback(Array.from(onlineUsers));
       }
     });
 
-    // Listen for new messages
     socket.on('sendMessage', async (message) => {
-      // Ensure the message has the senderId set from the authenticated user
       if (!message.senderId && userId) {
         message.senderId = userId;
       }
-      
+
       console.log('\n[Socket.io] Received sendMessage event:', {
         from: message.senderId,
         to: message.recipientId,
@@ -206,7 +172,6 @@ io.on('connection', async (socket) => {
       });
 
       try {
-        // Prepare message data
         const messageData = {
           senderId: message.senderId,
           recipientId: message.recipientId,
@@ -214,17 +179,14 @@ io.on('connection', async (socket) => {
           timestamp: new Date()
         };
 
-        // Only include taskId if it's a valid ObjectId or undefined
         if (message.taskId && message.taskId !== 'contact' && mongoose.Types.ObjectId.isValid(message.taskId)) {
           messageData.taskId = message.taskId;
         }
 
-        // Save the message to the database
         const savedMessage = await Message.create(messageData);
-        
+
         console.log(`[Socket.io] Saved message to database with ID: ${savedMessage._id}`);
 
-        // Prepare the message object with proper serialization
         const messageToSend = {
           ...savedMessage.toObject(),
           _id: savedMessage._id.toString(),
@@ -233,7 +195,6 @@ io.on('connection', async (socket) => {
           timestamp: savedMessage.timestamp ? new Date(savedMessage.timestamp).toISOString() : new Date().toISOString()
         };
 
-        // Broadcast the message to the recipient
         if (userSockets[message.recipientId]?.length > 0) {
           console.log(`[Socket.io] Sending to recipient ${message.recipientId}'s ${userSockets[message.recipientId].length} socket(s)`);
           userSockets[message.recipientId].forEach(socketId => {
@@ -244,7 +205,6 @@ io.on('connection', async (socket) => {
           console.log(`[Socket.io] Recipient ${message.recipientId} has no active sockets`);
         }
 
-        // Also send to sender's other tabs
         if (userSockets[message.senderId]?.length > 0) {
           console.log(`[Socket.io] Sending to sender ${message.senderId}'s other ${userSockets[message.senderId].length - 1} socket(s)`);
           userSockets[message.senderId].forEach(socketId => {
@@ -258,28 +218,24 @@ io.on('connection', async (socket) => {
         console.error('[Socket.io] Error in sendMessage handler:', err);
       }
     });
-    
-    // Log all events for debugging
+
     const originalEmit = socket.emit;
     socket.emit = function(event, ...args) {
       console.log(`[Socket.io] Emitting event '${event}' to socket ${socket.id}`);
       return originalEmit.apply(socket, [event, ...args]);
     };
-    
+
   } else {
     console.log('[Socket.io] Connection rejected - could not authenticate user');
     socket.disconnect(true);
   }
 });
 
-// Make io accessible to routes
 app.set('io', io);
 app.set('userSockets', userSockets);
 
-app.use(cors());
 app.use(express.json());
 
-// MongoDB connection
 mongoose.connect(process.env.MONGO_URI || process.env.MONGO_URI_DEV, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -294,7 +250,6 @@ mongoose.connect(process.env.MONGO_URI || process.env.MONGO_URI_DEV, {
   })
   .catch(err => console.error('MongoDB connection error:', err));
 
-// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/categories', categoriesRoutes);
