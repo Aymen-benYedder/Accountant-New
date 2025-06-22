@@ -242,10 +242,13 @@ const ChatAppContent = () => {
       });
 
       // Check if message belongs to current conversation
+      // The message is for this conversation if:
+      // 1. The conversationId matches the current conversation ID, OR
+      // 2. The message is between the current user and the contact we're chatting with
       const isCurrentConversation = 
         newMessage.conversationId === id ||
-        newMessage.senderId === id ||
-        newMessage.recipientId === id;
+        (newMessage.senderId === currentUserId && newMessage.recipientId === id) ||
+        (newMessage.senderId === id && newMessage.recipientId === currentUserId);
 
       if (!isCurrentConversation) {
         console.log('[ChatAppContent] Message not for current conversation, ignoring');
