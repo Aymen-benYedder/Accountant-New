@@ -27,21 +27,16 @@ export default defineConfig({
     }
   },
   server: {
-    // Disable HTTPS in development to match backend
-    // https: {
-    //   key: fs.readFileSync(resolve(__dirname, '../certs/localhost.key')),
-    //   cert: fs.readFileSync(resolve(__dirname, '../certs/localhost.crt')),
-    // },
     proxy: {
       '/api': {
-        target: 'https://localhost:3000',
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
         ws: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/socket.io': {
-        target: 'https://localhost:3000',
+        target: process.env.VITE_WS_URL || 'ws://localhost:3000',
         ws: true,
         changeOrigin: true,
         secure: false

@@ -149,20 +149,18 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       return () => {}; // Return empty cleanup function
     }
 
-    // Get the WebSocket URL from environment variables with better fallback handling
-    let wsUrl = import.meta.env.VITE_WS_URL;
-    
-    if (!wsUrl && import.meta.env.VITE_API_BASE_URL) {
-      wsUrl = import.meta.env.VITE_API_BASE_URL
-        .replace(/^http/, 'ws')
-        .replace('/api', '');
-    }
-    
-    // Default to current host if no URL is specified
-    if (!wsUrl) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      wsUrl = `${protocol}//${host}`;
+    // Get the WebSocket URL from environment variables with proper fallbacks
+    let wsUrl = import.meta.env.VITE_WS_URL || 
+      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+      
+    // If API base URL is provided but WS URL isn't, derive it from API URL
+    if (!import.meta.env.VITE_WS_URL && import.meta.env.VITE_API_BASE_URL) {
+      try {
+        const apiUrl = new URL(import.meta.env.VITE_API_BASE_URL);
+        wsUrl = `${apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${apiUrl.host}`;
+      } catch (e) {
+        console.warn('Invalid VITE_API_BASE_URL, using default WebSocket URL');
+      }
     }
     
     console.log(`[WebSocket] Connecting to: ${wsUrl}`);
