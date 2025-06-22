@@ -149,11 +149,21 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       return () => {}; // Return empty cleanup function
     }
 
-    // Get the WebSocket URL from environment variables
-    const wsUrl = import.meta.env.VITE_WS_URL || 
-                 (import.meta.env.VITE_API_BASE_URL ? 
-                   import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws').replace('/api', '') : 
-                   'ws://localhost:3000');
+    // Get the WebSocket URL from environment variables with better fallback handling
+    let wsUrl = import.meta.env.VITE_WS_URL;
+    
+    if (!wsUrl && import.meta.env.VITE_API_BASE_URL) {
+      wsUrl = import.meta.env.VITE_API_BASE_URL
+        .replace(/^http/, 'ws')
+        .replace('/api', '');
+    }
+    
+    // Default to current host if no URL is specified
+    if (!wsUrl) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      wsUrl = `${protocol}//${host}`;
+    }
     
     console.log(`[WebSocket] Connecting to: ${wsUrl}`);
     
@@ -164,25 +174,46 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       return () => {}; // Return empty cleanup function
     }
     
-    // Create socket connection with auth token
+    // Parse token to check expiration
+    let isTokenExpired = false;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (payload.exp && payload.exp < currentTime) {
+        console.warn('[WebSocket] Token has expired');
+        isTokenExpired = true;
+      }
+    } catch (e) {
+      console.error('[WebSocket] Error parsing token:', e);
+    }
+    
+    if (isTokenExpired) {
+      console.warn('[WebSocket] Token is invalid or expired, cannot connect');
+      return () => {}; // Return empty cleanup function
+    }
+    
+    // Create socket connection with enhanced configuration
     const socket = io(wsUrl, {
       auth: { token },
       reconnection: true,
-      reconnectionAttempts: maxReconnectionAttempts,
+      reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelayMax: 10000,
       timeout: 20000,
       autoConnect: true,
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'], // Start with websocket only
       withCredentials: true,
+      forceNew: true,
       query: {
         _t: Date.now(),
         clientType: 'web',
         token: token,
-        userId: userId || 'unknown'
-      }
+        userId: userId || 'unknown',
+        clientVersion: '1.0.0'
+      },
+      path: '/socket.io/' // Ensure this matches your server configuration
     });
-
+    
     socketRef.current = socket;
     console.log('[WebSocket] Socket instance created, connecting...');
 
@@ -197,10 +228,35 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
     const onDisconnect = (reason: string) => {
       console.log(`[WebSocket] Disconnected: ${reason}`);
       setIsConnected(false);
+      
+      // Attempt to reconnect with exponential backoff
+      if (reconnectAttemptsRef.current < maxReconnectionAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+        console.log(`[WebSocket] Attempting to reconnect in ${delay}ms...`);
+        reconnectAttemptsRef.current++;
+        
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+          console.log('[WebSocket] Attempting to reconnect...');
+          socket.connect();
+        }, delay);
+      } else {
+        console.warn('[WebSocket] Max reconnection attempts reached');
+      }
     };
 
     const onConnectError = (error: Error) => {
       console.error('[WebSocket] Connection error:', error);
+      
+      // Try falling back to polling if websocket fails
+      if (socket.io.opts.transports?.[0] !== 'polling') {
+        console.log('[WebSocket] Trying fallback to polling transport...');
+        socket.io.opts.transports = ['polling', 'websocket'];
+        socket.disconnect().connect();
+      }
     };
 
     const onUserStatus = (data: { userId: string; isOnline: boolean }) => {

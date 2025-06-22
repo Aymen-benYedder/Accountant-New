@@ -33,14 +33,16 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'https://localhost:3001',
+        target: 'https://localhost:3000',
         changeOrigin: true,
         secure: false,
         ws: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       },
-      '/ws': {
-        target: 'wss://localhost:3001',
+      '/socket.io': {
+        target: 'https://localhost:3000',
         ws: true,
+        changeOrigin: true,
         secure: false
       }
     }
