@@ -49,9 +49,8 @@ const ChatAppContent = () => {
   // Use proper type for JumboScrollbar ref
   const scrollRef = React.useRef<Scrollbars>(null);
 
-  const { socket, isConnected, sendMessage: wsSendMessage, lastMessage } = useWebSocket();
+  const { socket, isConnected, sendMessage: wsSendMessage } = useWebSocket();
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
-  const lastMessageRef = React.useRef<any>(null);
 
   const reloadMessages = React.useCallback(() => {
     if (!id) return;
