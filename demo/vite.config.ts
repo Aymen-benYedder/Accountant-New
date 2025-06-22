@@ -27,10 +27,11 @@ export default defineConfig({
     }
   },
   server: {
-    https: {
-      key: fs.readFileSync(resolve(__dirname, '../certs/localhost.key')),
-      cert: fs.readFileSync(resolve(__dirname, '../certs/localhost.crt')),
-    },
+    // Disable HTTPS in development to match backend
+    // https: {
+    //   key: fs.readFileSync(resolve(__dirname, '../certs/localhost.key')),
+    //   cert: fs.readFileSync(resolve(__dirname, '../certs/localhost.crt')),
+    // },
     proxy: {
       '/api': {
         target: 'https://localhost:3000',

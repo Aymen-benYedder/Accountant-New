@@ -201,9 +201,11 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       reconnectionDelayMax: 10000,
       timeout: 20000,
       autoConnect: true,
-      transports: ['websocket'], // Start with websocket only
+      transports: ['websocket', 'polling'], // Try both transports
       withCredentials: true,
       forceNew: true,
+      secure: true, // Enable secure connection
+      rejectUnauthorized: false, // Only for development with self-signed certs
       query: {
         _t: Date.now(),
         clientType: 'web',
@@ -213,6 +215,12 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       },
       path: '/socket.io/' // Ensure this matches your server configuration
     });
+    
+    // Enable debug logging
+    socket.on('connect', () => console.log('[WebSocket] Connected to server'));
+    socket.on('disconnect', (reason) => console.log(`[WebSocket] Disconnected: ${reason}`));
+    socket.on('connect_error', (error) => console.error('[WebSocket] Connection error:', error));
+    socket.on('error', (error) => console.error('[WebSocket] Error:', error));
     
     socketRef.current = socket;
     console.log('[WebSocket] Socket instance created, connecting...');

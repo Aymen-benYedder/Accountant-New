@@ -226,73 +226,79 @@ const ChatAppContent = () => {
     };
   }, [socket, currentUserId]);
 
-  // Handle new messages from WebSocket context
+  // Handle new messages from WebSocket and global events
   React.useEffect(() => {
-    if (!lastMessage || !id) return;
-    
-    // Skip if we've already processed this message
-    if (lastMessageRef.current?._id === lastMessage?._id) return;
-    
-    // Store the last processed message
-    lastMessageRef.current = lastMessage;
-    
-    // Process the new message
-    const newMessage = {
-      ...lastMessage,
-      _id: lastMessage._id || `temp-${Date.now()}`,
-      sent_by: lastMessage.sent_by || lastMessage.senderId,
-      senderId: lastMessage.senderId || lastMessage.sent_by,
-      recipientId: lastMessage.recipientId?.toString(),
-      content: lastMessage.content,
-      timestamp: lastMessage.timestamp || new Date().toISOString(),
-      status: lastMessage.status || 'delivered',
-      read: lastMessage.read || (lastMessage.senderId === currentUserId || lastMessage.sent_by === currentUserId)
-    };
-    
-    // Simplified conversation check
-    const senderId = newMessage.sent_by || newMessage.senderId;
-    const isCurrentUser = senderId === currentUserId;
-    const isRecipient = newMessage.recipientId === currentUserId;
-    const isCurrentConversation = 
-      (chatBy === 'contact' && (senderId === id || newMessage.recipientId === id)) ||
-      (chatBy && chatBy !== 'contact' && newMessage.taskId === chatBy) ||
-      isCurrentUser || isRecipient;
-    
-    if (!isCurrentConversation) return;
-    
-    // Update messages
-    setMessages(prevMessages => {
-      // Check if message exists by ID or content + sender + timestamp
-      const exists = prevMessages.some(msg => 
-        msg._id === newMessage._id || 
-        (msg.content === newMessage.content && 
-         (msg.sent_by === senderId || msg.senderId === senderId) &&
-         Math.abs(new Date(msg.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 60000)
-      );
+    const handleNewMessage = (event: CustomEvent) => {
+      const newMessage = event.detail;
       
-      if (exists) {
-        // Update existing message
-        return prevMessages.map(msg => 
-          (msg._id === newMessage._id || 
-           (msg.content === newMessage.content && 
-            (msg.sent_by === senderId || msg.senderId === senderId)))
-            ? { ...msg, ...newMessage, status: newMessage.status || msg.status || 'delivered' }
-            : msg
-        );
+      // Skip if no message or no conversation ID
+      if (!newMessage || !id) return;
+      
+      console.log('[ChatAppContent] New message received:', { 
+        id: newMessage._id, 
+        from: newMessage.senderId,
+        to: newMessage.recipientId,
+        conversationId: newMessage.conversationId,
+        content: newMessage.content?.substring(0, 50) + (newMessage.content?.length > 50 ? '...' : '')
+      });
+
+      // Check if message belongs to current conversation
+      const isCurrentConversation = 
+        newMessage.conversationId === id ||
+        newMessage.senderId === id ||
+        newMessage.recipientId === id;
+
+      if (!isCurrentConversation) {
+        console.log('[ChatAppContent] Message not for current conversation, ignoring');
+        return;
       }
+
+      // Process the new message
+      const processedMessage = {
+        ...newMessage,
+        _id: newMessage._id || `temp-${Date.now()}`,
+        sent_by: newMessage.sent_by || newMessage.senderId,
+        senderId: newMessage.senderId || newMessage.sent_by,
+        recipientId: newMessage.recipientId?.toString(),
+        content: newMessage.content,
+        timestamp: newMessage.timestamp || new Date().toISOString(),
+        status: newMessage.status || 'delivered',
+        read: newMessage.read || (newMessage.senderId === currentUserId)
+      };
+
+      // Update messages state
+      setMessages(prevMessages => {
+        // Simple deduplication by ID
+        const exists = prevMessages.some(msg => msg._id === processedMessage._id);
+        
+        if (exists) {
+          console.log('[ChatAppContent] Duplicate message detected, ignoring');
+          return prevMessages;
+        }
+        
+        console.log('[ChatAppContent] Adding new message to state');
+        return [...prevMessages, processedMessage];
+      });
       
-      // Add new message
-      return [...prevMessages, newMessage];
-    });
-    
-    // Scroll to bottom
-    scrollToBottom();
-    
-    // Mark as read if message is from other user
-    if (!isCurrentUser) {
-      markMessagesAsRead();
-    }
-  }, [lastMessage, id, chatBy, currentUserId, markMessagesAsRead, scrollToBottom]);
+      // Auto-scroll to bottom when new message arrives
+      scrollToBottom();
+      
+      // Mark as read if message is from other user
+      if (processedMessage.senderId !== currentUserId) {
+        console.log('[ChatAppContent] Marking message as read');
+        markMessagesAsRead();
+      }
+    };
+
+    // Set up event listener for global WebSocket messages
+    const eventListener = (e: Event) => handleNewMessage(e as CustomEvent);
+    window.addEventListener('newMessage', eventListener as EventListener);
+
+    // Clean up event listener on unmount
+    return () => {
+      window.removeEventListener('newMessage', eventListener as EventListener);
+    };
+  }, [id, currentUserId, markMessagesAsRead, scrollToBottom]);
 
   // Handle sending a new message
   const handleSend = React.useCallback(async (content: string) => {
