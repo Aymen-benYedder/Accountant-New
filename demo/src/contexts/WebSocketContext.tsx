@@ -150,16 +150,24 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
     }
 
     // Get the WebSocket URL from environment variables with proper fallbacks
-    let wsUrl = import.meta.env.VITE_WS_URL || 
-      `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+    let wsUrl = import.meta.env.VITE_WS_URL || '';
+    
+    // If WS URL is not explicitly set, try to derive it from the API URL or current host
+    if (!wsUrl) {
+      if (import.meta.env.VITE_API_BASE_URL) {
+        try {
+          const apiUrl = new URL(import.meta.env.VITE_API_BASE_URL);
+          wsUrl = `${apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${apiUrl.host}`;
+          console.log('[WebSocket] Derived WS URL from VITE_API_BASE_URL:', wsUrl);
+        } catch (e) {
+          console.warn('Invalid VITE_API_BASE_URL, falling back to current host');
+        }
+      }
       
-    // If API base URL is provided but WS URL isn't, derive it from API URL
-    if (!import.meta.env.VITE_WS_URL && import.meta.env.VITE_API_BASE_URL) {
-      try {
-        const apiUrl = new URL(import.meta.env.VITE_API_BASE_URL);
-        wsUrl = `${apiUrl.protocol === 'https:' ? 'wss:' : 'ws:'}//${apiUrl.host}`;
-      } catch (e) {
-        console.warn('Invalid VITE_API_BASE_URL, using default WebSocket URL');
+      // If still no URL, use current host with appropriate protocol
+      if (!wsUrl && typeof window !== 'undefined') {
+        wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+        console.log('[WebSocket] Using current host as WS URL:', wsUrl);
       }
     }
     
@@ -190,19 +198,28 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       return () => {}; // Return empty cleanup function
     }
     
+    console.log('[WebSocket] Creating socket connection to:', wsUrl);
+    
     // Create socket connection with enhanced configuration
     const socket = io(wsUrl, {
       auth: { token },
+      // Connection settings
+      autoConnect: true,
+      // Transport settings
+      transports: ['websocket', 'polling'],
+      upgrade: true,
+      // Reconnection settings
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
+      reconnectionDelayMax: 5000,
+      // Timeout settings
       timeout: 20000,
-      autoConnect: true,
-      transports: ['websocket', 'polling'], // Try both transports
+      // Security settings
       withCredentials: true,
-      forceNew: true,
       secure: true, // Enable secure connection
+      // Force new connection
+      forceNew: true,
       rejectUnauthorized: false, // Only for development with self-signed certs
       query: {
         _t: Date.now(),

@@ -22,6 +22,8 @@ const usersRoutes = require('./src/routes/users');
 const companiesRoutes = require('./src/routes/companies');
 
 const app = express();
+// Create HTTP server
+const server = require('http').createServer(app);
 
 // Enhanced CORS configuration
 const allowedOrigins = [
@@ -85,10 +87,7 @@ app.use((req, res, next) => {
 // Serve uploads statically from /uploads at root (http://localhost:3000/uploads/...)
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-// Create HTTP server
-const server = http.createServer(app);
-
-// Configure Socket.IO with CORS and authentication
+// Configure Socket.IO with CORS
 const io = new Server(server, {
   cors: {
     origin: function(origin, callback) {
@@ -99,11 +98,12 @@ const io = new Server(server, {
       }
       return callback(null, true);
     },
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
   },
   transports: ['websocket', 'polling'],
+  maxHttpBufferSize: 1e8, // 100MB max payload
   allowUpgrades: true,
   perMessageDeflate: {
     threshold: 1024,
@@ -337,6 +337,15 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+
+// Start the server
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`WebSocket server available at ws://localhost:${PORT}`);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+  process.exit(1);
 });
