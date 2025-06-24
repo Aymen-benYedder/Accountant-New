@@ -32,6 +32,9 @@ router.post('/', jwtAuth, (req, res, next) => {
 // Update a user by ID (PUT /users/:id)
 router.put('/:id', jwtAuth, UserController.updateUser);
 
+// Update user's Firebase token (PUT /users/:userId/firebase-token)
+router.put('/:userId/firebase-token', jwtAuth, adminOnly, UserController.updateUserFirebaseToken);
+
 // Delete a user by ID (DELETE /users/:id)
 router.delete('/:id', jwtAuth, adminOnly, UserController.deleteUser);
 

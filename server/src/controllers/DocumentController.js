@@ -2,6 +2,8 @@
 
 const Document = require('../models/Document');
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 
 // Get all documents
 exports.getAllDocuments = async (req, res) => {
@@ -14,9 +16,16 @@ exports.getAllDocuments = async (req, res) => {
     }
     // You can extend for category, owner etc.
 
-    const docs = await Document.find(query)
+    let docs = await Document.find(query)
       .populate("owner", "name email")
       .populate("company", "name tin");
+      
+    // Map the documents to include a 'name' field from 'originalname'
+    docs = docs.map(doc => ({
+      ...doc.toObject(),
+      name: doc.originalname
+    }));
+      
     res.json(docs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch documents' });
@@ -26,11 +35,16 @@ exports.getAllDocuments = async (req, res) => {
 // Get document by id
 exports.getDocumentById = async (req, res) => {
   try {
-    const doc = await Document.findById(req.params.id)
+    let doc = await Document.findById(req.params.id)
       .populate("owner", "name email")
       .populate("company", "name tin");
     if (!doc) return res.status(404).json({ error: 'Document not found' });
-    res.json(doc);
+    
+    // Convert to object and add name field
+    const docObj = doc.toObject();
+    docObj.name = doc.originalname;
+    
+    res.json(docObj);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch document' });
   }
@@ -85,7 +99,12 @@ exports.createDocument = async (req, res) => {
     const populatedDoc = await Document.findById(doc._id)
       .populate("owner", "name email")
       .populate("company", "name tin");
-    res.status(201).json(populatedDoc);
+      
+    // Convert to object and add name field
+    const responseDoc = populatedDoc.toObject();
+    responseDoc.name = populatedDoc.originalname;
+    
+    res.status(201).json(responseDoc);
   } catch (error) {
     res.status(400).json({ error: 'Failed to create document' });
   }
@@ -101,6 +120,54 @@ exports.updateDocument = async (req, res) => {
     res.json(doc);
   } catch (error) {
     res.status(400).json({ error: 'Failed to update document' });
+  }
+};
+
+// Download document file
+exports.downloadDocument = async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Check permissions (similar to create/update)
+    const Company = require("../models/Company");
+    const company = await Company.findById(doc.company);
+    if (!company) {
+      return res.status(404).json({ error: "Company not found." });
+    }
+
+    const isAdmin = req.user.role === "admin";
+    const isOwner = company.owner && company.owner.toString() === req.user.id.toString();
+    const isAccountant = 
+      req.user.role === "accountant" && 
+      company.accountant && 
+      company.accountant.toString() === req.user.id.toString();
+
+    if (!isAdmin && !isOwner && !isAccountant) {
+      return res.status(403).json({ error: "Not authorized to download this document" });
+    }
+
+    const filePath = path.join(__dirname, '../../public', doc.path);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on server' });
+    }
+
+    // Set headers for file download
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.originalname)}"`);
+    res.setHeader('Content-Type', doc.mimetype);
+    res.setHeader('Content-Length', doc.size);
+    
+    // Stream the file
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+    
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Failed to download document' });
   }
 };
 

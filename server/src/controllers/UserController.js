@@ -217,6 +217,40 @@ const updateUser = async (req, res) => {
   }
 };
 
+// Update user's Firebase token (Admin only)
+const updateUserFirebaseToken = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ message: 'Firebase token is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update the firebase token
+    user.firebaseToken = token;
+    await user.save();
+
+    // Invalidate cache for this user
+    await delCache(`users_${user._id}`);
+    await delCache('users');
+
+    res.status(200).json({ 
+      message: 'Firebase token updated successfully',
+      userId: user._id,
+      hasToken: !!token
+    });
+  } catch (error) {
+    console.error('Error updating Firebase token:', error);
+    res.status(500).json({ message: 'Server error while updating Firebase token' });
+  }
+};
+
 // Delete user by ID
 const deleteUser = async (req, res) => {
   try {
@@ -235,5 +269,6 @@ module.exports = {
   getUserById,
   createUser,
   updateUser,
+  updateUserFirebaseToken,
   deleteUser,
 };

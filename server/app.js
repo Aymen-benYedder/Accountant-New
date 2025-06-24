@@ -102,7 +102,17 @@ const io = new Server(server, {
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
   },
+  // Allow both transports but prefer WebSocket
   transports: ['websocket', 'polling'],
+  // Enable connection state recovery
+  connectionStateRecovery: {
+    // the backup duration of the sessions and the packets
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+    // whether to skip middlewares upon successful recovery
+    skipMiddlewares: true,
+  },
+  // Enable per-message deflation
+  perMessageDeflate: true,
   maxHttpBufferSize: 1e8, // 100MB max payload
   allowUpgrades: true,
   perMessageDeflate: {
@@ -141,6 +151,7 @@ const User = require("./src/models/User");
 const Message = require("./src/models/Message");
 const JWT_SECRET = process.env.JWT_SECRET || "devsecret";
 
+// Track user socket connections and online status
 const userSockets = {};
 const onlineUsers = new Set();
 
@@ -156,6 +167,7 @@ io.on('connection', async (socket) => {
     }
   });
 
+  // Extract token from auth, headers, or query
   let token = socket.handshake.auth?.token || 
              (socket.handshake.headers?.authorization && 
               socket.handshake.headers.authorization.split(" ")[1]);
@@ -185,11 +197,19 @@ io.on('connection', async (socket) => {
   }
 
   if (userId) {
-    userSockets[userId] = userSockets[userId] || [];
-    userSockets[userId].push(socket.id);
-
-    console.log(`[Socket.io] User ${userId} now has ${userSockets[userId].length} active connections`);
-    console.log('Active sockets:', userSockets);
+    // Initialize userSockets for this user if it doesn't exist
+    if (!userSockets[userId]) {
+      userSockets[userId] = new Set();
+    }
+    
+    // Add this socket to the user's sockets
+    userSockets[userId].add(socket.id);
+    
+    // Join a room for this user
+    socket.join(`user_${userId}`);
+    
+    console.log(`[Socket.io] User ${userId} connected. Total connections: ${userSockets[userId].size}`);
+    console.log(`[Socket.io] Active users: ${Object.keys(userSockets).length}, Total connections: ${Object.values(userSockets).reduce((acc, sockets) => acc + sockets.size, 0)}`);
 
     try {
       onlineUsers.add(userId);
@@ -203,25 +223,34 @@ io.on('connection', async (socket) => {
       console.error('[Socket.io] Error updating user status:', err);
     }
 
-    socket.on('disconnect', async () => {
-      console.log(`\n[Socket.io] Socket ${socket.id} disconnected`);
+    socket.on('disconnect', async (reason) => {
+      console.log(`\n[Socket.io] Socket ${socket.id} disconnected. Reason: ${reason}`);
 
-      if (userId) {
-        if (userSockets[userId]) {
-          userSockets[userId] = userSockets[userId].filter(id => id !== socket.id);
-
-          if (userSockets[userId].length === 0) {
-            delete userSockets[userId];
-            onlineUsers.delete(userId);
-
-            try {
-              await User.findByIdAndUpdate(userId, { online: false, lastSeen: new Date() });
-              console.log(`[Socket.io] Updated user ${userId} status to offline`);
-              io.emit('userStatus', { userId, isOnline: false });
-            } catch (err) {
-              console.error('[Socket.io] Error updating user status to offline:', err);
-            }
+      if (userId && userSockets[userId]) {
+        // Remove this socket from the user's sockets
+        userSockets[userId].delete(socket.id);
+        
+        // If no more sockets for this user, clean up
+        if (userSockets[userId].size === 0) {
+          delete userSockets[userId];
+          onlineUsers.delete(userId);
+          
+          try {
+            await User.findByIdAndUpdate(userId, { 
+              online: false, 
+              lastSeen: new Date() 
+            });
+            console.log(`[Socket.io] User ${userId} is now offline`);
+            io.emit('userStatus', { 
+              userId, 
+              isOnline: false,
+              lastSeen: new Date()
+            });
+          } catch (err) {
+            console.error('[Socket.io] Error updating user status to offline:', err);
           }
+        } else {
+          console.log(`[Socket.io] User ${userId} still has ${userSockets[userId].size} active connections`);
         }
       }
     });
@@ -232,7 +261,18 @@ io.on('connection', async (socket) => {
       }
     });
 
-    socket.on('sendMessage', async (message) => {
+    socket.on('sendMessage', async (message, ackCallback) => {
+      // Validate required fields
+      if (!message.recipientId || !message.content) {
+        const error = new Error('Missing required fields: recipientId and content are required');
+        console.error('[Socket.io] Validation error:', error.message);
+        if (typeof ackCallback === 'function') {
+          return ackCallback({ success: false, error: error.message });
+        }
+        return;
+      }
+
+      // Ensure sender is set from socket if not provided
       if (!message.senderId && userId) {
         message.senderId = userId;
       }
@@ -245,21 +285,25 @@ io.on('connection', async (socket) => {
       });
 
       try {
+        // Create message data with status
         const messageData = {
           senderId: message.senderId,
           recipientId: message.recipientId,
           content: message.content,
+          status: 'sent',
           timestamp: new Date()
         };
 
+        // Add taskId if valid
         if (message.taskId && message.taskId !== 'contact' && mongoose.Types.ObjectId.isValid(message.taskId)) {
           messageData.taskId = message.taskId;
         }
 
+        // Save message to database
         const savedMessage = await Message.create(messageData);
-
         console.log(`[Socket.io] Saved message to database with ID: ${savedMessage._id}`);
 
+        // Prepare message for sending
         const messageToSend = {
           ...savedMessage.toObject(),
           _id: savedMessage._id.toString(),
@@ -268,30 +312,139 @@ io.on('connection', async (socket) => {
           timestamp: savedMessage.timestamp ? new Date(savedMessage.timestamp).toISOString() : new Date().toISOString()
         };
 
-        if (userSockets[message.recipientId]?.length > 0) {
-          console.log(`[Socket.io] Sending to recipient ${message.recipientId}'s ${userSockets[message.recipientId].length} socket(s)`);
-          userSockets[message.recipientId].forEach(socketId => {
-            console.log(`[Socket.io] Emitting newMessage to socket ${socketId}`);
-            io.to(socketId).emit('newMessage', messageToSend);
+        // Send acknowledgment back to sender with the saved message
+        if (typeof ackCallback === 'function') {
+          ackCallback({ 
+            success: true, 
+            message: messageToSend,
+            status: 'sent'
+          });
+        }
+
+        // Send to recipient if online
+        const recipientSockets = userSockets[message.recipientId];
+        if (recipientSockets?.size > 0) {
+          console.log(`[Socket.io] Sending to recipient ${message.recipientId}'s ${recipientSockets.size} socket(s)`);
+          
+          // Emit to recipient's room with a callback for delivery confirmation
+          io.to(`user_${message.recipientId}`).emit('newMessage', messageToSend, (response) => {
+            if (response?.success) {
+              console.log(`[Socket.io] Message ${savedMessage._id} delivered to recipient`);
+              // Update message status to delivered
+              Message.findByIdAndUpdate(
+                savedMessage._id, 
+                { status: 'delivered' },
+                { new: true }
+              ).then(updatedMessage => {
+                // Notify sender that message was delivered
+                io.to(`user_${message.senderId}`).emit('messageStatusChanged', {
+                  messageId: savedMessage._id,
+                  status: 'delivered',
+                  timestamp: new Date()
+                });
+              }).catch(err => {
+                console.error('[Socket.io] Error updating message status to delivered:', err);
+              });
+            }
           });
         } else {
           console.log(`[Socket.io] Recipient ${message.recipientId} has no active sockets`);
         }
 
-        if (userSockets[message.senderId]?.length > 0) {
-          console.log(`[Socket.io] Sending to sender ${message.senderId}'s other ${userSockets[message.senderId].length - 1} socket(s)`);
-          userSockets[message.senderId].forEach(socketId => {
-            if (socketId !== socket.id) {
-              console.log(`[Socket.io] Emitting newMessage to sender's other socket ${socketId}`);
-              io.to(socketId).emit('newMessage', messageToSend);
-            }
+        // Also send to sender's other tabs/connections
+        if (userSockets[message.senderId]?.size > 1) {
+          socket.to(`user_${message.senderId}`).emit('newMessage', {
+            ...messageToSend,
+            status: 'sent' // Only the original sender sees 'sent' status
           });
         }
       } catch (err) {
         console.error('[Socket.io] Error in sendMessage handler:', err);
+        if (typeof ackCallback === 'function') {
+          ackCallback({ 
+            success: false, 
+            error: 'Failed to send message',
+            details: err.message 
+          });
+        }
       }
     });
 
+    // Handler for marking messages as read
+    socket.on('markMessagesAsRead', async ({ messageIds, readerId }, ackCallback) => {
+      console.log(`[Socket.io] Received markMessagesAsRead for ${messageIds.length} messages from user ${readerId}`);
+      
+      try {
+        if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+          throw new Error('messageIds array is required');
+        }
+
+        // Update messages to mark them as read in the database
+        const result = await Message.updateMany(
+          {
+            _id: { $in: messageIds },
+            recipientId: readerId,
+            read: { $ne: true } // Only update if not already read
+          },
+          {
+            $set: {
+              read: true,
+              readAt: new Date(),
+              status: 'read',
+              updatedAt: new Date()
+            }
+          }
+        );
+
+        console.log(`[Socket.io] Marked ${result.nModified} messages as read for user ${readerId}`);
+
+        // Get the updated messages to send to the sender
+        const updatedMessages = await Message.find({
+          _id: { $in: messageIds },
+          recipientId: readerId
+        }).lean();
+
+        // Notify the sender that their messages were read
+        updatedMessages.forEach(async (message) => {
+          const senderId = message.senderId?.toString();
+          
+          if (senderId && userSockets[senderId]) {
+            // Emit to sender's room that their messages were read
+            io.to(`user_${senderId}`).emit('messagesRead', {
+              messageIds: [message._id],
+              readerId,
+              readAt: message.readAt || new Date()
+            });
+            
+            // Update message status to 'read' for the sender
+            io.to(`user_${senderId}`).emit('messageStatusChanged', {
+              messageId: message._id,
+              status: 'read',
+              timestamp: message.readAt || new Date()
+            });
+          }
+        });
+
+        // Send acknowledgment to the client
+        if (typeof ackCallback === 'function') {
+          ackCallback({
+            success: true,
+            updatedCount: result.nModified,
+            message: `Marked ${result.nModified} messages as read`
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.io] Error in markMessagesAsRead:', error);
+        if (typeof ackCallback === 'function') {
+          ackCallback({
+            success: false,
+            error: error.message || 'Failed to mark messages as read'
+          });
+        }
+      }
+    });
+
+    // Log all emitted events for debugging
     const originalEmit = socket.emit;
     socket.emit = function(event, ...args) {
       console.log(`[Socket.io] Emitting event '${event}' to socket ${socket.id}`);

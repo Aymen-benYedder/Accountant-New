@@ -41,152 +41,148 @@ router.get('/', jwtAuth, async (req, res) => {
   }
 });
 
-// Send a message
+// Send a message - DEPRECATED: Use WebSocket sendMessage event instead
 router.post('/', jwtAuth, async (req, res) => {
-  const { taskId, recipientId, content } = req.body;
-  const io = req.app.get('io');
-  const userSockets = req.app.get('userSockets');
-
-  // Input Validation
-  if (!recipientId || !content || content.trim() === '') {
-    return res.status(400).json({ error: 'recipientId and content are required' });
-  }
-
-  // Sanitize content
-  const sanitizedContent = content.trim();
-
-  // Log request for auditing
-  console.log(`Received message request from user ${req.user.id}. Task ID: ${taskId || 'None'}, Recipient ID: ${recipientId}`);
-
-  // Perform recipient validation
-  if (req.user.id === recipientId) {
-    return res.status(400).json({ error: 'You cannot send a message to yourself' });
-  }
-
   try {
-    // If no taskId is provided, use null or a default value (optional)
-    // ensure taskId is a valid ObjectId, otherwise set null
-    const mongoose = require('mongoose');
-    let messageTaskId = null;
-    if (taskId && mongoose.Types.ObjectId.isValid(taskId)) {
-      messageTaskId = taskId;
+    const { taskId, recipientId, content } = req.body;
+    const io = req.app.get('io');
+    
+    // Log deprecation warning
+    console.warn(`[DEPRECATED] HTTP POST /api/messages called. Client should use WebSocket sendMessage event instead.`);
+    
+    // Input Validation
+    if (!recipientId || !content || content.trim() === '') {
+      return res.status(400).json({ 
+        success: false,
+        error: 'recipientId and content are required',
+        deprecated: true,
+        message: 'This endpoint is deprecated. Please use the WebSocket sendMessage event instead.'
+      });
     }
 
-    // Log message creation attempt
-    console.log(`Attempting to create a message from user ${req.user.id} to recipient ${recipientId}`);
+    // Sanitize content
+    const sanitizedContent = content.trim();
 
-    // Check if recipient exists in database
+    // Check if recipient exists
     const recipient = await User.findById(recipientId);
     if (!recipient) {
-      console.error(`Recipient ID ${recipientId} not found. Sender ID: ${req.user.id}`);
-      return res.status(404).json({ error: 'Recipient not found' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Recipient not found',
+        deprecated: true
+      });
     }
 
-    // Save the message to the database
-    const msg = await Message.create({
-      taskId: messageTaskId,
-      senderId: req.user.id,
+    // Create message data matching WebSocket format
+    const messageData = {
       recipientId,
-      content: sanitizedContent
+      content: sanitizedContent,
+      taskId: taskId || undefined,
+      senderId: req.user.id,
+      timestamp: new Date()
+    };
+
+    // Emit the message via WebSocket
+    return new Promise((resolve) => {
+      io.to(`user_${req.user.id}`).emit('sendMessage', messageData, (response) => {
+        if (response.success) {
+          res.status(201).json({
+            ...response.message,
+            _warning: 'This endpoint is deprecated. Please use the WebSocket sendMessage event instead.'
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            error: response.error || 'Failed to send message',
+            deprecated: true
+          });
+        }
+        resolve();
+      });
+      
+      // Set a timeout in case the client doesn't respond
+      setTimeout(() => {
+        if (!res.headersSent) {
+          res.status(504).json({
+            success: false,
+            error: 'Message send timeout',
+            deprecated: true,
+            message: 'The message could not be sent. Please try again or check your WebSocket connection.'
+          });
+          resolve();
+        }
+      }, 5000);
     });
-
-    // Populate sender info for the client
-    const populatedMsg = await Message.findById(msg._id).populate('senderId', 'name email');
-
-    // Log successful message creation
-    console.log(`Message successfully created from user ${req.user.id} to recipient ${recipientId}. Message ID: ${msg.id}`);
-
-    // Broadcast the message to the recipient
-    if (userSockets[recipientId]) {
-      userSockets[recipientId].forEach(socketId => {
-        io.to(socketId).emit('newMessage', populatedMsg);
-      });
-    }
-    
-    // Also send to sender's other tabs
-    if (userSockets[req.user.id]) {
-      userSockets[req.user.id].forEach(socketId => {
-        io.to(socketId).emit('newMessage', populatedMsg);
-      });
-    }
-
-    // Respond with the created message
-    res.status(201).json(populatedMsg);
-
   } catch (err) {
-    // Log error
-    console.error(`Error occurred while sending message from user ${req.user.id}: ${err.message}`);
-
-    // Send appropriate error response
-    res.status(500).json({ error: 'Failed to send message. Please try again.' });
+    console.error('Error in deprecated message endpoint:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error',
+      deprecated: true,
+      details: err.message 
+    });
   }
 });
 
-// Mark messages as read
+// Mark messages as read - DEPRECATED: Use WebSocket markMessagesAsRead event instead
 router.post('/mark-as-read', jwtAuth, async (req, res) => {
-  const { messageIds } = req.body;
-  const io = req.app.get('io');
-  const userSockets = req.app.get('userSockets');
-  
-  if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
-    return res.status(400).json({ error: 'messageIds array is required' });
-  }
-
   try {
-    // First find the messages to get sender information
-    const messages = await Message.find({
-      _id: { $in: messageIds },
-      recipientId: req.user.id,
-      read: { $ne: true }
-    }).populate('senderId', 'id');
-
-    if (messages.length === 0) {
-      return res.status(404).json({ 
-        error: 'No unread messages found with the provided IDs',
-        details: 'Messages may already be read or not belong to the user'
+    const { messageIds } = req.body;
+    const io = req.app.get('io');
+    
+    // Log deprecation warning
+    console.warn(`[DEPRECATED] HTTP POST /api/messages/mark-as-read called. Use WebSocket markMessagesAsRead event instead.`);
+    
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'messageIds array is required',
+        deprecated: true
       });
     }
 
-    // Get unique sender IDs
-    const senderIds = [...new Set(messages.map(msg => msg.senderId?.id?.toString()).filter(Boolean))];
-
-    // Update all messages that belong to the current user and are unread
-    const result = await Message.updateMany(
-      {
-        _id: { $in: messageIds },
-        recipientId: req.user.id,
-        read: { $ne: true }
-      },
-      { $set: { read: true, readAt: new Date() } }
-    );
-
-    // Get the updated messages with full details
-    const updatedMessages = await Message.find({
-      _id: { $in: messageIds },
-      recipientId: req.user.id
-    }).populate('senderId', 'name email');
-
-    // Notify all senders that their messages were read
-    senderIds.forEach(senderId => {
-      if (userSockets[senderId]) {
-        userSockets[senderId].forEach(socketId => {
-          io.to(socketId).emit('messagesRead', {
-            messageIds: updatedMessages.map(m => m._id),
-            readerId: req.user.id,
-            timestamp: new Date()
+    // Emit the mark as read event via WebSocket
+    return new Promise((resolve) => {
+      io.to(`user_${req.user.id}`).emit('markMessagesAsRead', { 
+        messageIds,
+        readerId: req.user.id 
+      }, (response) => {
+        if (response.success) {
+          res.json({
+            ...response,
+            _warning: 'This endpoint is deprecated. Please use the WebSocket markMessagesAsRead event instead.'
           });
-        });
-      }
-    });
-
-    res.json({ 
-      success: true, 
-      updatedCount: result.modifiedCount,
-      messageIds: updatedMessages.map(m => m._id)
+        } else {
+          res.status(500).json({
+            success: false,
+            error: response.error || 'Failed to mark messages as read',
+            deprecated: true
+          });
+        }
+        resolve();
+      });
+      
+      // Set a timeout in case the client doesn't respond
+      setTimeout(() => {
+        if (!res.headersSent) {
+          res.status(504).json({
+            success: false,
+            error: 'Mark as read operation timed out',
+            deprecated: true,
+            message: 'The operation could not be completed. Please try again or check your WebSocket connection.'
+          });
+          resolve();
+        }
+      }, 5000);
     });
   } catch (err) {
-    console.error('Error marking messages as read:', err);
-    res.status(500).json({ error: 'Failed to mark messages as read' });
+    console.error('Error in deprecated mark-as-read endpoint:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error',
+      deprecated: true,
+      details: err.message 
+    });
   }
 });
 

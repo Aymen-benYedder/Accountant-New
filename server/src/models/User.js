@@ -13,6 +13,7 @@ const UserSchema = new Schema({
   // Array of company ObjectIds referencing companies owned by this user
   companies: [{ type: Schema.Types.ObjectId, ref: 'Company' }],
   online: { type: Boolean, default: false },
+  firebaseToken: { type: String, default: null },
 }, {
   timestamps: true,
 });
