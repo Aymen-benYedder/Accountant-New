@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #log {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        #messageInput:disabled {
+            background-color: #eee;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div>
+        <button id="connectBtn">Connect to WebSocket</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+    <div style="margin-top: 20px;">
+        <h3>Send Test Message:</h3>
+        <input type="text" id="messageInput" placeholder="Type your message" style="width: 300px; padding: 5px;" disabled />
+        <button id="sendBtn" disabled>Send</button>
+    </div>
+    <div>
+        <h3>Connection Status: <span id="status">Disconnected</span></h3>
+    </div>
+    <div>
+        <h3>Messages:</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const log = (message, className = '') => {
+            const logElement = document.getElementById('log');
+            const messageElement = document.createElement('div');
+            messageElement.className = className;
+            messageElement.textContent = `[${new Date().toISOString()}] ${message}`;
+            logElement.appendChild(messageElement);
+            logElement.scrollTop = logElement.scrollHeight;
+        };
+
+        const wsUrl = 'ws://localhost:3000';
+        let socket = null;
+
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            log(`Connecting to ${wsUrl}...`, 'info');
+            document.getElementById('status').textContent = 'Connecting...';
+            document.getElementById('connectBtn').disabled = true;
+            
+            // Get a token first
+            fetch('http://localhost:3000/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: 'alice.acct@example.com',
+                    password: 'aliceacct'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.token) {
+                    throw new Error('No token received');
+                }
+                log('Login successful, connecting WebSocket...', 'success');
+                
+                // Connect to WebSocket with token
+                socket = io(wsUrl, {
+                    auth: { token: data.token },
+                    transports: ['websocket'],
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                });
+
+                socket.on('connect', () => {
+                    const status = document.getElementById('status');
+                    status.textContent = 'Connected';
+                    status.className = 'success';
+                    document.getElementById('disconnectBtn').disabled = false;
+                    log('WebSocket connected successfully!', 'success');
+                    log(`Socket ID: ${socket.id}`, 'info');
+                });
+
+                socket.on('disconnect', (reason) => {
+                    const status = document.getElementById('status');
+                    status.textContent = `Disconnected: ${reason}`;
+                    status.className = 'error';
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                    log(`Disconnected: ${reason}`, 'error');
+                });
+
+                socket.on('connect_error', (error) => {
+                    log(`Connection error: ${error.message}`, 'error');
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                });
+
+                // Listen for custom events
+                socket.on('message', (data) => {
+                    log(`Message received: ${JSON.stringify(data)}`, 'info');
+                });
+
+                socket.on('notification', (data) => {
+                    log(`Notification: ${JSON.stringify(data)}`, 'info');
+                });
+
+                socket.on('test', (data) => {
+                    log(`Test event received: ${JSON.stringify(data)}`, 'success');
+                });
+
+                // Enable send button when connected
+                document.getElementById('sendBtn').disabled = false;
+                document.getElementById('messageInput').disabled = false;
+            })
+            .catch(error => {
+                log(`Login failed: ${error.message}`, 'error');
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('status').textContent = 'Login failed';
+            });
+        });
+
+        document.getElementById('disconnectBtn').addEventListener('click', () => {
+            if (socket) {
+                log('Disconnecting...', 'info');
+                socket.disconnect();
+                document.getElementById('sendBtn').disabled = true;
+                document.getElementById('messageInput').disabled = true;
+            }
+        });
+
+        // Handle sending messages
+        document.getElementById('sendBtn').addEventListener('click', () => {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            if (message && socket) {
+                log(`Sending message: ${message}`, 'info');
+                socket.emit('test', { 
+                    message: message,
+                    timestamp: new Date().toISOString(),
+                    from: 'test-client'
+                });
+                messageInput.value = '';
+            }
+        });
+
+        // Allow pressing Enter to send message
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('sendBtn').click();
+            }
+        });
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (socket) {
+                socket.disconnect();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -25,8 +25,9 @@ const app = express();
 // Create HTTP server
 const server = require('http').createServer(app);
 
-// Enhanced CORS configuration
+// Enhanced CORS configuration for development and production
 const allowedOrigins = [
+  // Local development
   'http://localhost:3000',
   'https://localhost:3000',
   'http://127.0.0.1:3000',
@@ -35,21 +36,44 @@ const allowedOrigins = [
   'https://localhost:5173',
   'http://127.0.0.1:5173',
   'https://127.0.0.1:5173',
+  
+  // Production
   'https://accountant-new.onrender.com',
-  'https://accountant-frontend.onrender.com'
+  'https://accountant-frontend.onrender.com',
+  
+  // Development and testing
+  'http://localhost:*',
+  'http://127.0.0.1:*',
+  'null' // For file:// protocol
 ];
 
 // Configure CORS with enhanced options
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    // Allow requests with no origin (like file:// protocol or mobile apps)
+    if (!origin) {
+      console.log('Allowing request with no origin (likely file:// protocol)');
+      return callback(null, true);
+    }
     
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+    // Check if the origin matches any of our allowed patterns
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      // Handle wildcard ports
+      if (allowedOrigin.endsWith(':*')) {
+        const baseOrigin = allowedOrigin.replace(':*', '');
+        return origin.startsWith(baseOrigin);
+      }
+      return origin === allowedOrigin;
+    });
+    
+    if (!isAllowed) {
+      const msg = `CORS blocked request from origin: ${origin}`;
       console.warn(msg);
+      console.log('Allowed origins:', allowedOrigins);
       return callback(new Error(msg), false);
     }
+    
+    console.log(`Allowing CORS request from origin: ${origin}`);
     return callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -220,8 +244,19 @@ io.on('connection', async (socket) => {
       console.log(`[Socket.io] Updated user ${userId} status to online`);
       io.emit('userStatus', { userId, isOnline: true });
     } catch (err) {
-      console.error('[Socket.io] Error updating user status:', err);
+      console.error('[Socket.io] Error updating user status to online:', err);
     }
+
+    // Listen for test messages and echo them back
+    socket.on('test', (data) => {
+        console.log(`[Socket.io] Test message received from ${socket.id}:`, data);
+        // Echo the message back to the sender
+        socket.emit('test', {
+            ...data,
+            serverReceivedAt: new Date().toISOString(),
+            originalMessage: 'Echo from server: ' + (data.message || '')
+        });
+    });
 
     socket.on('disconnect', async (reason) => {
       console.log(`\n[Socket.io] Socket ${socket.id} disconnected. Reason: ${reason}`);
@@ -370,7 +405,118 @@ io.on('connection', async (socket) => {
       }
     });
 
-    // Handler for marking messages as read
+    // Handler for message delivery confirmation
+    socket.on('message:delivered', async ({ messageId }, ackCallback) => {
+      console.log(`[Socket.io] Received message:delivered for message ${messageId}`);
+      
+      try {
+        if (!messageId) {
+          throw new Error('messageId is required');
+        }
+
+        // Update message status to 'delivered' in the database
+        const updatedMessage = await Message.findByIdAndUpdate(
+          messageId,
+          { 
+            status: 'delivered',
+            deliveredAt: new Date(),
+            $inc: { __v: 1 } // Increment version
+          },
+          { new: true }
+        );
+
+        if (!updatedMessage) {
+          throw new Error('Message not found');
+        }
+
+        console.log(`[Socket.io] Message ${messageId} marked as delivered`);
+
+        // Notify the sender that their message was delivered
+        const senderId = updatedMessage.senderId?.toString();
+        if (senderId && userSockets[senderId]) {
+          io.to(`user_${senderId}`).emit('messageStatusChanged', {
+            messageId: updatedMessage._id,
+            status: 'delivered',
+            timestamp: updatedMessage.deliveredAt || new Date()
+          });
+        }
+
+        // Send acknowledgment to the client
+        if (typeof ackCallback === 'function') {
+          ackCallback({
+            success: true,
+            message: 'Message marked as delivered',
+            messageId: updatedMessage._id
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.io] Error in message:delivered:', error);
+        if (typeof ackCallback === 'function') {
+          ackCallback({
+            success: false,
+            error: error.message || 'Failed to update message status'
+          });
+        }
+      }
+    });
+
+    // Handler for message read receipt
+    socket.on('message:read', async ({ messageId }, ackCallback) => {
+      console.log(`[Socket.io] Received message:read for message ${messageId}`);
+      
+      try {
+        if (!messageId) {
+          throw new Error('messageId is required');
+        }
+
+        // Update message status to 'read' in the database
+        const updatedMessage = await Message.findByIdAndUpdate(
+          messageId,
+          { 
+            status: 'read',
+            read: true,
+            readAt: new Date(),
+            $inc: { __v: 1 } // Increment version
+          },
+          { new: true }
+        );
+
+        if (!updatedMessage) {
+          throw new Error('Message not found');
+        }
+
+        console.log(`[Socket.io] Message ${messageId} marked as read`);
+
+        // Notify the sender that their message was read
+        const senderId = updatedMessage.senderId?.toString();
+        if (senderId && userSockets[senderId]) {
+          io.to(`user_${senderId}`).emit('messageStatusChanged', {
+            messageId: updatedMessage._id,
+            status: 'read',
+            timestamp: updatedMessage.readAt || new Date()
+          });
+        }
+
+        // Send acknowledgment to the client
+        if (typeof ackCallback === 'function') {
+          ackCallback({
+            success: true,
+            message: 'Message marked as read',
+            messageId: updatedMessage._id
+          });
+        }
+      } catch (error) {
+        console.error('[Socket.io] Error in message:read:', error);
+        if (typeof ackCallback === 'function') {
+          ackCallback({
+            success: false,
+            error: error.message || 'Failed to update message status'
+          });
+        }
+      }
+    });
+
+    // Handler for marking multiple messages as read
     socket.on('markMessagesAsRead', async ({ messageIds, readerId }, ackCallback) => {
       console.log(`[Socket.io] Received markMessagesAsRead for ${messageIds.length} messages from user ${readerId}`);
       
@@ -392,14 +538,37 @@ io.on('connection', async (socket) => {
               readAt: new Date(),
               status: 'read',
               updatedAt: new Date()
-            }
-          }
+            },
+            $inc: { __v: 1 } // Increment version for each update
+          },
+          { multi: true }
         );
+
+        // Get the updated messages to send notifications
+        const updatedMessages = await Message.find({
+          _id: { $in: messageIds },
+          recipientId: readerId
+        });
+
+        // Notify senders about read status
+        const notifications = updatedMessages.map(async (message) => {
+          const senderId = message.senderId?.toString();
+          if (senderId && userSockets[senderId]) {
+            io.to(`user_${senderId}`).emit('messageStatusChanged', {
+              messageId: message._id,
+              status: 'read',
+              timestamp: message.readAt || new Date()
+            });
+          }
+        });
+
+        // Wait for all notifications to complete
+        await Promise.all(notifications);
 
         console.log(`[Socket.io] Marked ${result.nModified} messages as read for user ${readerId}`);
 
-        // Get the updated messages to send to the sender
-        const updatedMessages = await Message.find({
+        // Get the updated messages to send to the sender (lean for better performance)
+        const messagesForSender = await Message.find({
           _id: { $in: messageIds },
           recipientId: readerId
         }).lean();

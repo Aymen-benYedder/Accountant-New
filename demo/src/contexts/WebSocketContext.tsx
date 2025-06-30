@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useCallback, useState, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { MessageStatus } from '@app/_components/apps/_types/ChatTypes';
 // Import useAuth with a safe default to handle cases where AuthProvider is not available
 let useAuth: any = () => ({});
 try {
@@ -16,8 +17,10 @@ export interface WebSocketContextType {
   isConnected: boolean;
   onlineUsers: Set<string>;
   lastMessage: any | null;
-  sendMessage: (message: any) => void;
+  sendMessage: (message: any, onStatusUpdate?: (status: MessageStatus) => void) => void;
   isUserOnline: (userId: string) => boolean;
+  updateMessageStatus: (messageId: string, status: MessageStatus) => void;
+  markMessagesAsRead: (messageIds: string[], readerId: string) => Promise<{success: boolean; error?: string}>;
 }
 
 // Create the WebSocket context
@@ -79,19 +82,147 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
   // Track if we've initialized the socket connection
   const initializedRef = useRef(false);
 
+  // Track message status updates
+  const messageStatusHandlers = useRef<{[key: string]: (status: MessageStatus) => void}>({});
+
   // Function to send a message through the socket
-  const sendMessage = useCallback((message: any) => {
+  const sendMessage = useCallback((message: any, onStatusUpdate?: (status: MessageStatus) => void) => {
     if (socketRef.current?.connected) {
-      socketRef.current.emit('sendMessage', message);
+      const tempId = message.tempId || `temp-${Date.now()}`;
+      console.log('[WebSocket] Sending message with tempId:', tempId);
+      
+      // If there's a status update handler, store it
+      if (onStatusUpdate) {
+        messageStatusHandlers.current[tempId] = onStatusUpdate;
+        // Set initial status
+        onStatusUpdate('sending');
+      }
+      
+      // Add temp ID to track this message
+      const messageToSend = {
+        ...message,
+        tempId,
+        // Ensure we have a timestamp
+        timestamp: message.timestamp || new Date().toISOString()
+      };
+      
+      console.log('[WebSocket] Emitting sendMessage event:', {
+        ...messageToSend,
+        content: messageToSend.content ? `${messageToSend.content.substring(0, 50)}...` : 'No content'
+      });
+      
+      // Emit the message with acknowledgment
+      socketRef.current.emit('sendMessage', messageToSend, (response: any) => {
+        console.log('[WebSocket] Message send acknowledgment:', response);
+        
+        if (response?.success) {
+          // If we have a server message with ID, update our temp ID mapping
+          if (response.message?._id) {
+            // Update the message status to sent
+            if (onStatusUpdate) {
+              onStatusUpdate('sent');
+              
+              // If the message was already delivered (happens fast in local testing)
+              if (response.message.status === 'delivered') {
+                onStatusUpdate('delivered');
+              }
+            }
+            
+            // Update the message ID mapping
+            if (tempId && response.message._id) {
+              messageStatusHandlers.current[response.message._id] = messageStatusHandlers.current[tempId];
+              delete messageStatusHandlers.current[tempId];
+            }
+          }
+        } else if (onStatusUpdate) {
+          onStatusUpdate('error');
+        }
+      });
     } else {
       console.warn('Cannot send message - socket not connected');
+      if (onStatusUpdate) {
+        onStatusUpdate('error');
+      }
     }
-  }, []);
+  }, [socketRef, isConnected]);
 
   // Check if a user is online
   const isUserOnline = useCallback((userId: string): boolean => {
     return onlineUsers.has(userId);
   }, [onlineUsers]);
+
+  // Handle message status updates
+  const updateMessageStatus = useCallback((messageId: string, status: MessageStatus) => {
+    const handler = messageStatusHandlers.current[messageId];
+    if (handler) {
+      handler(status);
+      
+      // Clean up if status is final
+      if (['delivered', 'read', 'error'].includes(status)) {
+        delete messageStatusHandlers.current[messageId];
+      }
+    }
+  }, []);
+
+  // Mark messages as read using WebSocket
+  const markMessagesAsRead = useCallback(async (messageIds: string[], readerId: string): Promise<{success: boolean; error?: string}> => {
+    if (!socketRef.current?.connected) {
+      console.warn('Cannot mark messages as read - socket not connected');
+      return { success: false, error: 'Not connected to server' };
+    }
+
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      console.warn('No message IDs provided to mark as read');
+      return { success: false, error: 'No message IDs provided' };
+    }
+
+    try {
+      console.log(`[WebSocket] Marking ${messageIds.length} messages as read`);
+      
+      // Use a promise to handle the WebSocket acknowledgment
+      return await new Promise((resolve) => {
+        // Add a timeout to prevent hanging if the server doesn't respond
+        const timeout = setTimeout(() => {
+          console.warn('[WebSocket] Timeout waiting for markMessagesAsRead response');
+          resolve({ success: false, error: 'Request timed out' });
+        }, 5000);
+
+        // Emit the markMessagesAsRead event
+        socketRef.current?.emit('markMessagesAsRead', { 
+          messageIds, 
+          readerId 
+        }, (response: any) => {
+          // Clear the timeout since we got a response
+          clearTimeout(timeout);
+          
+          if (!response) {
+            console.error('[WebSocket] No response received from server');
+            resolve({ success: false, error: 'No response from server' });
+            return;
+          }
+          
+          if (response.success) {
+            console.log(`[WebSocket] Successfully marked ${messageIds.length} messages as read`);
+            // Update local state for each message
+            messageIds.forEach(messageId => {
+              updateMessageStatus(messageId, 'read');
+            });
+            resolve({ success: true });
+          } else {
+            const errorMsg = response.error || 'Failed to mark messages as read';
+            console.error(`[WebSocket] Error marking messages as read:`, errorMsg);
+            resolve({ success: false, error: errorMsg });
+          }
+        });
+      });
+    } catch (error) {
+      console.error('[WebSocket] Error in markMessagesAsRead:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }, [updateMessageStatus]);
 
   // Connect to WebSocket
   const connectWebSocket = useCallback((): (() => void) => {
@@ -320,7 +451,24 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
 
     // Set up event listeners
     socket.on('newMessage', onNewMessage);
-    
+
+    // Add message status event listeners
+    const onMessageDelivered = (data: { messageId: string }) => {
+      updateMessageStatus(data.messageId, 'delivered');
+    };
+
+    const onMessageRead = (data: { messageId: string }) => {
+      updateMessageStatus(data.messageId, 'read');
+    };
+
+    const onMessageReceived = (data: { messageId: string }) => {
+      updateMessageStatus(data.messageId, 'received');
+    };
+
+    socket.on('message:delivered', onMessageDelivered);
+    socket.on('message:read', onMessageRead);
+    socket.on('message:received', onMessageReceived);
+
     // Cleanup function
     return () => {
       console.log('[WebSocket] Cleaning up WebSocket connection');
@@ -329,6 +477,9 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
       socket.off('connect_error', onConnectError);
       socket.off('userStatus', onUserStatus);
       socket.off('newMessage', onNewMessage);
+      socket.off('message:delivered', onMessageDelivered);
+      socket.off('message:read', onMessageRead);
+      socket.off('message:received', onMessageReceived);
       
       if (socket.connected) {
         socket.disconnect();
@@ -381,8 +532,10 @@ const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
     onlineUsers,
     lastMessage,
     sendMessage,
-    isUserOnline
-  }), [isConnected, onlineUsers, lastMessage, sendMessage, isUserOnline]);
+    isUserOnline,
+    updateMessageStatus,
+    markMessagesAsRead
+  }), [isConnected, onlineUsers, lastMessage, sendMessage, isUserOnline, updateMessageStatus, markMessagesAsRead]);
 
   return (
     <WebSocketContext.Provider value={contextValue}>

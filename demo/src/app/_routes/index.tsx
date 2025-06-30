@@ -1,5 +1,6 @@
 import { Page } from "@app/_components/_core";
 import { AuthGuard } from "@app/_components/_core/AuthGuard/AuthGuard";
+import WebSocketTest from "@app/_components/WebSocketTest/WebSocketTest";
 import {
   ActiveLogin,
   AdvertisingSettings,
@@ -181,6 +182,7 @@ const routes = [
           { path: "user/profile-2/:id", element: <Page Component={ProfilePage2Dynamic} /> },
           { path: "user/profile-3", element: <Page Component={ProfilePage2} /> },
           { path: "user/profile-4", element: <Page Component={ProfilePage3} /> },
+          { path: "websocket-test", element: <Page Component={WebSocketTest} /> },
           { path: "*", element: <div style={{ color: "red", padding: 32, textAlign: "center", fontSize: 24 }}>NO ROUTE MATCHED</div> },
           { path: "/user/social-wall", element: <Page Component={SocialWallApp} /> },
           {

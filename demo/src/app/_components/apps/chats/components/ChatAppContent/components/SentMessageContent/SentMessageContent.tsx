@@ -18,25 +18,31 @@ interface SentMessageContentProps {
     content: string;
     timestamp?: string | Date;
     status?: MessageStatus;
+    _id?: string | number;
+    readAt?: string | Date;
     [key: string]: any; // Allow additional properties
   };
-  senderName: string;
+  senderName?: string;
   status?: MessageStatus;
+  showAvatar?: boolean;
 }
 
 const SentMessageContent: React.FC<SentMessageContentProps> = ({
   message,
-  senderName,
-  status: propStatus
+  senderName = 'You',
+  status: propStatus,
+  showAvatar = false
 }) => {
   // Debug logging
   useDebugLog('SentMessageContent', { 
     messageId: message._id || 'unknown',
     status: propStatus || message.status,
-    content: message.content?.substring(0, 30) + (message.content?.length > 30 ? '...' : '')
+    content: message.content?.substring(0, 30) + (message.content?.length > 30 ? '...' : ''),
+    showAvatar
   });
   
-  const status = propStatus || message.status || 'sent';
+  // Ensure status is always a valid MessageStatus
+  const status: MessageStatus = (propStatus || message.status || 'sent') as MessageStatus;
   const readAt = message.readAt ? new Date(message.readAt) : null;
   
   // Format the timestamp
@@ -67,30 +73,35 @@ const SentMessageContent: React.FC<SentMessageContentProps> = ({
     });
     
     // Map status to display text and icons
-    const statusConfig = {
+    // Define status configuration with proper typing
+    const statusConfig: Record<MessageStatus, { text: string; icon: string; readAt?: Date | null }> = {
       'sending': { text: 'Sending...', icon: '🕒' },
       'sent': { text: 'Sent', icon: '✓' },
       'delivered': { text: 'Delivered', icon: '✓✓' },
-      'read': { text: 'Read', icon: '✓✓', readAt: readAt },
-      'error': { text: 'Error', icon: '⚠️' }
-    } as const;
+      'read': { text: 'Read', icon: '✓✓', readAt },
+      'error': { text: 'Error', icon: '⚠️' },
+      'received': { text: 'Received', icon: '✓' } // Add received status for completeness
+    };
     
-    type StatusKey = keyof typeof statusConfig;
-    const safeStatus: StatusKey = status in statusConfig ? status as StatusKey : 'error';
-    const config = statusConfig[safeStatus];
+    // Get the status config, defaulting to error if status is invalid
+    const config = statusConfig[status] || statusConfig['error'];
     
     const statusText = config.text;
     const statusIcon = config.icon;
     
-    // Styling based on status
-    const statusStyles = {
-      'sending': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
-      'received': { color: 'rgba(0, 0, 0, 0.6)', bgColor: 'rgba(0, 0, 0, 0.05)' },
-      'error': { color: '#ff6b6b', bgColor: 'rgba(255, 76, 81, 0.1)' },
-      'read': { color: '#4caf50', bgColor: 'rgba(76, 175, 80, 0.1)' },
-      'delivered': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
-      'sent': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
-    }[status] || { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' };
+    // Styling based on status with proper type safety
+    const statusStyles = (() => {
+      const styles = {
+        'sending': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
+        'received': { color: 'rgba(0, 0, 0, 0.6)', bgColor: 'rgba(0, 0, 0, 0.05)' },
+        'error': { color: '#ff6b6b', bgColor: 'rgba(255, 76, 81, 0.1)' },
+        'read': { color: '#4caf50', bgColor: 'rgba(76, 175, 80, 0.1)' },
+        'delivered': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
+        'sent': { color: 'rgba(255, 255, 255, 0.7)', bgColor: 'rgba(0, 0, 0, 0.1)' },
+      } as const;
+      
+      return styles[status as keyof typeof styles] || styles.sent;
+    })();
     
     // Create the status content with tooltip
     const statusContent = (

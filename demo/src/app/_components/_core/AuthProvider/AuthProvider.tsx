@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(storedUser);
           } else {
             // Fallback: fetch from backend, adjust endpoint as needed
-            const resp = await fetch("/api/auth/me", {
+            const resp = await fetch(process.env.VITE_API_BASE_URL+"/auth/me", {
               headers: { Authorization: "Bearer " + token }
             });
             if (resp.ok) {

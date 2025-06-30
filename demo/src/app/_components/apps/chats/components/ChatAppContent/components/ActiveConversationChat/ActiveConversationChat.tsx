@@ -1,8 +1,11 @@
-import React from "react";
-import { Box, Chip, Typography } from "@mui/material";
+import React, { useEffect, useCallback } from "react";
+import { Box, Chip, Typography, Tooltip, CircularProgress } from "@mui/material";
 import { SentMessageContent } from "../SentMessageContent";
 import { ReceivedMessageContent } from "../ReceivedMessageContent";
 import { MessagesProps, MessageStatus } from "@app/_components/apps/_types/ChatTypes";
+import { Check, DoneAll } from "@mui/icons-material";
+import { useWebSocket } from "@contexts/WebSocketContext";
+import { formatDistanceToNow } from "date-fns";
 
 // Enhanced message type that makes content required and handles status properly
 type EnhancedMessageProps = Omit<MessagesProps, 'status' | 'content'> & {
@@ -36,6 +39,10 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
   const { conversation, activeConversation, currentUserId, loading = false } = props;
   const remoteUser = activeConversation?.contact;
   const messagesContainerRef = React.useRef<HTMLDivElement>(null);
+  const { socket, isConnected } = useWebSocket();
+  
+  // Track which messages have been seen by the remote user with proper typing
+  const [messageStatus, setMessageStatus] = React.useState<Record<string, MessageStatus>>({});
   
   // Memoize and sort messages by timestamp
   const messages = React.useMemo(() => {
@@ -56,6 +63,103 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages]);
+  
+  // Set up WebSocket event listeners for message status updates
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+    
+    const handleMessageDelivered = (data: { messageId: string }) => {
+      console.log('Message delivered:', data.messageId);
+      setMessageStatus(prev => ({
+        ...prev,
+        [data.messageId]: 'delivered' as MessageStatus
+      }));
+    };
+    
+    const handleMessageRead = (data: { messageId: string }) => {
+      console.log('Message read:', data.messageId);
+      setMessageStatus(prev => ({
+        ...prev,
+        [data.messageId]: 'read' as MessageStatus
+      }));
+    };
+    
+    const handleMessageStatusChanged = (data: { 
+      messageId: string; 
+      status: MessageStatus;
+      timestamp?: string | Date;
+    }) => {
+      console.log('Message status changed:', data);
+      setMessageStatus(prev => ({
+        ...prev,
+        [data.messageId]: data.status
+      }));
+    };
+    
+    socket.on('message:delivered', handleMessageDelivered);
+    socket.on('message:read', handleMessageRead);
+    socket.on('messageStatusChanged', handleMessageStatusChanged);
+    
+    return () => {
+      socket.off('message:delivered', handleMessageDelivered);
+      socket.off('message:read', handleMessageRead);
+      socket.off('messageStatusChanged', handleMessageStatusChanged);
+    };
+  }, [socket, isConnected]);
+  
+  // Mark messages as read when they become visible
+  const handleMessageSeen = useCallback((messageId: string | number) => {
+    if (!socket || !isConnected) return;
+    
+    // Only mark as read if the message is from the other user
+    const message = messages.find(m => m._id === messageId || m.id === messageId);
+    if (message && String(message.senderId) !== String(currentUserId)) {
+      console.log('Marking message as read:', messageId);
+      socket.emit('message:read', { messageId: String(messageId) });
+    }
+  }, [socket, isConnected, messages, currentUserId]);
+  
+  // Render message status indicator
+  const renderMessageStatus = (message: EnhancedMessageProps) => {
+    const status = messageStatus[message._id || ''] || message.status;
+    const timestamp = message.timestamp || message.createdAt || message.sent_at;
+    const timeAgo = timestamp ? formatDistanceToNow(new Date(timestamp), { addSuffix: true }) : '';
+    
+    switch (status) {
+      case 'sending':
+        return (
+          <Tooltip title="Sending...">
+            <CircularProgress size={16} />
+          </Tooltip>
+        );
+      case 'sent':
+        return (
+          <Tooltip title={`Sent ${timeAgo}`}>
+            <Check fontSize="small" color="disabled" />
+          </Tooltip>
+        );
+      case 'delivered':
+        return (
+          <Tooltip title={`Delivered ${timeAgo}`}>
+            <DoneAll fontSize="small" color="disabled" />
+          </Tooltip>
+        );
+      case 'read':
+        return (
+          <Tooltip title={`Read ${timeAgo}`}>
+            <DoneAll fontSize="small" color="primary" />
+          </Tooltip>
+        );
+      case 'error':
+        return (
+          <Tooltip title="Failed to send">
+            <Typography variant="caption" color="error">Failed</Typography>
+          </Tooltip>
+        );
+      default:
+        return null;
+    }
+  };
   
   // Loading state
   if (loading) {
@@ -78,6 +182,22 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
   return (
     <Box
       ref={messagesContainerRef}
+      onScroll={(e) => {
+        // Check if we've scrolled to the bottom (or near it)
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+        
+        if (isNearBottom) {
+          // Mark messages as read when scrolled to bottom
+          messages.forEach(msg => {
+            // Only mark as read if the message is from the other user and not already read
+            const msgId = msg._id || msg.id;
+            if (msgId && msg.senderId !== currentUserId && msg.status !== 'read') {
+              handleMessageSeen(msgId);
+            }
+          });
+        }
+      }}
       sx={{
         flex: 1,
         overflowY: 'auto',
@@ -120,8 +240,10 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
       )}
       
       {/* Messages */}
-      {messages.map((message) => {
+      {messages.map((message, idx) => {
+        const messageId = message._id || `msg-${message.id || Math.random().toString(36).substr(2, 9)}`;
         const isOwnMessage = String(message.senderId || message.sent_by) === String(currentUserId);
+        const status = messageStatus[messageId] || message.status || (isOwnMessage ? 'sent' : 'received');
         let senderName = "Contact";
         
         if (isOwnMessage) {
@@ -133,18 +255,25 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
         return (
           <React.Fragment key={message._id || `msg-${message.id || Math.random().toString(36).substr(2, 9)}`}>
             {isOwnMessage ? (
-              <div style={{ position: 'relative' }}>
-                <SentMessageContent 
-                  message={message} 
-                  senderName={senderName}
-                  status={message.status || 'delivered'}
+              <Box key={messageId} sx={{ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+                <SentMessageContent
+                  message={{
+                    ...message,
+                    status,
+                    _id: messageId,
+                    read: status === 'read'
+                  }}
+                  showAvatar={idx === messages.length - 1 || messages[idx + 1].senderId !== message.senderId}
                 />
-              </div>
+              </Box>
             ) : (
               <ReceivedMessageContent 
                 message={{
                   ...message,
-status: message.status || 'received' // Ensure status is always passed
+                  _id: messageId,
+                  status,
+                  read: status === 'read',
+                  readAt: status === 'read' ? new Date().toISOString() : undefined
                 }}
                 senderName={senderName}
               />

@@ -49,7 +49,7 @@ const ChatAppContent = () => {
   // Use proper type for JumboScrollbar ref
   const scrollRef = React.useRef<Scrollbars>(null);
 
-  const { socket, isConnected, sendMessage: wsSendMessage } = useWebSocket();
+  const { socket, isConnected, sendMessage: wsSendMessage, markMessagesAsRead: markMessagesAsReadWebSocket } = useWebSocket();
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
 
   const reloadMessages = React.useCallback(() => {
@@ -65,7 +65,7 @@ const ChatAppContent = () => {
     });
   }, [id]);
 
-  // Mark messages as read when they become visible
+  // Mark messages as read when they become visible using WebSocket
   const markMessagesAsRead = React.useCallback(async () => {
     if (!messages || !messages.length) {
       console.log('[markMessagesAsRead] No messages to mark as read');
@@ -88,24 +88,26 @@ const ChatAppContent = () => {
     console.log(`[markMessagesAsRead] Marking ${messageIds.length} messages as read`);
 
     try {
-      // Use the existing API client which already has auth headers
-      const response = await api.post('/messages/mark-as-read', { messageIds });
+      // Use WebSocket to mark messages as read
+      const result = await markMessagesAsReadWebSocket(messageIds, currentUserId);
       
-      console.log(`[markMessagesAsRead] Successfully marked ${response.data?.updatedCount || 0} messages as read`);
-      
-      // The WebSocket event will handle the UI update, but we'll update optimistically
-      // to make the UI feel more responsive
-      setMessages(prevMessages => {
-        const updatedMessages = prevMessages.map(msg => 
-          messageIds.includes(msg._id) 
-            ? { ...msg, read: true, status: 'read' }
-            : msg
+      if (result.success) {
+        console.log('[markMessagesAsRead] Successfully marked messages as read via WebSocket');
+        
+        // Update local state optimistically
+        setMessages(prevMessages => 
+          prevMessages.map(msg => 
+            messageIds.includes(msg._id) 
+              ? { ...msg, read: true, status: 'read' }
+              : msg
+          )
         );
-        return updatedMessages;
-      });
-      
-      // Update unread count
-      setUnreadCount(prev => Math.max(0, prev - messageIds.length));
+        
+        // Update unread count
+        setUnreadCount(prev => Math.max(0, prev - messageIds.length));
+      } else {
+        console.error('[markMessagesAsRead] Failed to mark messages as read via WebSocket:', result.error);
+      }
       
     } catch (error) {
       console.error('[markMessagesAsRead] Error:', {
@@ -113,8 +115,6 @@ const ChatAppContent = () => {
         messageIds,
         currentUserId
       });
-      
-      // Optionally, you could retry or show an error message to the user
     }
   }, [messages, currentUserId]);
 
@@ -255,6 +255,11 @@ const ChatAppContent = () => {
         return;
       }
 
+      // Check if this is a server response for a message we sent
+      const isServerResponseForOurMessage = 
+        newMessage.senderId === currentUserId && 
+        newMessage.tempId;
+
       // Process the new message
       const processedMessage = {
         ...newMessage,
@@ -270,6 +275,16 @@ const ChatAppContent = () => {
 
       // Update messages state
       setMessages(prevMessages => {
+        // If this is a server response for a message we sent, replace the optimistic update
+        if (isServerResponseForOurMessage) {
+          console.log('[ChatAppContent] Replacing optimistic message with server response');
+          return prevMessages.map(msg => 
+            msg._id === `optimistic-${newMessage.tempId}` 
+              ? { ...processedMessage, _id: newMessage._id, status: 'sent' }
+              : msg
+          );
+        }
+        
         // Simple deduplication by ID
         const exists = prevMessages.some(msg => msg._id === processedMessage._id);
         
@@ -285,10 +300,35 @@ const ChatAppContent = () => {
       // Auto-scroll to bottom when new message arrives
       scrollToBottom();
       
-      // Mark as read if message is from other user
-      if (processedMessage.senderId !== currentUserId) {
-        console.log('[ChatAppContent] Marking message as read');
-        markMessagesAsRead();
+      // Mark as read if message is from other user and has a valid ID
+      if (processedMessage.senderId !== currentUserId && processedMessage._id && !processedMessage._id.startsWith('temp-')) {
+        console.log('[ChatAppContent] Marking message as read via WebSocket');
+        // Ensure we have a valid message ID and current user ID
+        if (!currentUserId) {
+          console.error('[ChatAppContent] Cannot mark message as read: currentUserId is missing');
+          return;
+        }
+        
+        // Use the WebSocket function directly with the message ID and current user ID
+        markMessagesAsReadWebSocket([processedMessage._id], currentUserId)
+          .then(result => {
+            if (result.success) {
+              console.log('[ChatAppContent] Message marked as read successfully');
+              // Update the message status in the UI
+              setMessages(prevMessages => 
+                prevMessages.map(msg => 
+                  msg._id === processedMessage._id 
+                    ? { ...msg, read: true, status: 'read' } 
+                    : msg
+                )
+              );
+            } else {
+              console.error('[ChatAppContent] Failed to mark message as read:', result.error);
+            }
+          })
+          .catch(error => {
+            console.error('[ChatAppContent] Error marking message as read:', error);
+          });
       }
     };
 
@@ -321,51 +361,67 @@ const ChatAppContent = () => {
       timestamp: new Date().toISOString()
     });
     
+    const tempId = Date.now().toString();
     const messageData = {
       taskId: chatBy || undefined,
       recipientId: id,
       content: trimmedContent,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      tempId // Add tempId to track this message
     };
     
-    console.log('[ChatAppContent] Sending message:', {
-      ...messageData,
-      content: `${trimmedContent.substring(0, 30)}${trimmedContent.length > 30 ? '...' : ''}`
-    });
-    
     try {
-      // Send message via WebSocket if connected, otherwise fall back to HTTP
-      if (isConnected && socket) {
-        console.log('[ChatAppContent] Sending via WebSocket');
-        // Optimistically update the UI
-        const optimisticMessage = {
+      // Always use WebSocket for sending messages
+      console.log('[ChatAppContent] Sending via WebSocket');
+      
+      // Create an optimistic message
+      const optimisticMessage = {
+        ...messageData,
+        _id: `optimistic-${tempId}`,
+        senderId: currentUserId,
+        status: 'sending' as const,
+        tempId,
+        read: false
+      };
+      
+      // Add the optimistic message to the UI immediately
+      setMessages(prev => [...prev, optimisticMessage]);
+      
+      // Send the message via WebSocket with a status update handler
+      wsSendMessage(
+        {
           ...messageData,
-          _id: `optimistic-${Date.now()}`,
-          senderId: currentUserId,
-          status: 'sending'
-        };
-        
-        setMessages(prev => [...prev, optimisticMessage]);
-        
-        // Send via WebSocket
-        wsSendMessage(messageData);
-      } else {
-        console.log('[ChatAppContent] WebSocket not connected, falling back to HTTP');
-        const response = await api.post('/messages', messageData);
-        console.log('[ChatAppContent] Message sent via HTTP, updating UI');
-        // Update the messages with the server response
-        setMessages(prev => [...prev, response.data]);
-      }
+          tempId // Include tempId in the message data
+        },
+        (status) => {
+          console.log(`[ChatAppContent] Message status updated to: ${status}`);
+          
+          // Update the message status in the UI
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.tempId === tempId 
+                ? { ...msg, status }
+                : msg
+            )
+          );
+        }
+      );
+      
     } catch (error) {
       console.error('[ChatAppContent] Error sending message:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         isConnected,
         hasSocket: !!socket
       });
+      
       // Update the message status to show error
-      setMessages(prev => prev.map(msg => 
-        msg.status === 'sending' ? { ...msg, status: 'error' } : msg
-      ));
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.tempId === tempId 
+            ? { ...msg, status: 'error' } 
+            : msg
+        )
+      );
     }
   }, [id, chatBy, isConnected, wsSendMessage, socket, currentUserId]);
   

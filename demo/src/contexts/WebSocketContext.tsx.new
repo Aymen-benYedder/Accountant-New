@@ -1,0 +1,276 @@
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useCallback,
+  useState,
+  ReactNode,
+  useMemo
+} from 'react';
+import { io, Socket } from 'socket.io-client';
+
+// Define types for our WebSocket context
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface WebSocketMessage {
+  _id: string;
+  senderId: string;
+  recipientId: string;
+  content: string;
+  timestamp: string;
+  status: MessageStatus;
+  conversationId?: string;
+  read?: boolean;
+  error?: string;
+}
+
+interface WebSocketContextType {
+  socket: Socket | null;
+  isConnected: boolean;
+  onlineUsers: Set<string>;
+  lastMessage: WebSocketMessage | null;
+  sendMessage: (
+    message: Omit<WebSocketMessage, '_id' | 'timestamp' | 'status'>, 
+    onAck?: (response: any) => void
+  ) => void;
+  isUserOnline: (userId: string) => boolean;
+}
+
+// Create the WebSocket context with a default value
+const WebSocketContext = createContext<WebSocketContextType | null>(null);
+
+// Custom hook to use the WebSocket context
+export const useWebSocket = (): WebSocketContextType => {
+  const context = useContext(WebSocketContext);
+  if (!context) {
+    throw new Error('useWebSocket must be used within a WebSocketProvider');
+  }
+  return context;
+};
+
+interface WebSocketProviderProps {
+  children: ReactNode;
+  url?: string;
+}
+
+/**
+ * WebSocketProvider component that manages WebSocket connection and provides it via context
+ */
+const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ 
+  children, 
+  url = window.location.host 
+}) => {
+  // State
+  const [isConnected, setIsConnected] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
+  
+  // Refs
+  const socketRef = useRef<Socket | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMounted = useRef(true);
+  
+  // Constants
+  const maxReconnectionAttempts = 5;
+
+  // Function to send a message through the socket with acknowledgment
+  const sendMessage = useCallback((
+    message: Omit<WebSocketMessage, '_id' | 'timestamp' | 'status'>,
+    onAck?: (response: any) => void
+  ) => {
+    if (!socketRef.current?.connected) {
+      console.warn('Cannot send message - socket not connected');
+      onAck?.({
+        success: false,
+        error: 'Not connected to server',
+        message: null
+      });
+      return;
+    }
+
+    // Create a temporary ID for the message (will be replaced by server ID)
+    const tempId = `temp-${Date.now()}`;
+    
+    // Create the message with temporary ID and status
+    const messageToSend: WebSocketMessage = {
+      ...message,
+      _id: tempId,
+      timestamp: new Date().toISOString(),
+      status: 'sending'
+    };
+
+    console.log('[WebSocket] Sending message:', {
+      to: message.recipientId,
+      content: message.content ? `${message.content.substring(0, 30)}...` : 'No content'
+    });
+
+    // Set the last message to show in the UI immediately
+    setLastMessage(messageToSend);
+
+    // Send message with acknowledgment
+    socketRef.current.emit('sendMessage', messageToSend, (response: any) => {
+      if (!isMounted.current) return;
+      
+      const logData = {
+        success: response?.success,
+        messageId: response?.message?._id || tempId,
+        status: response?.status
+      };
+      
+      console.log('[WebSocket] Message send acknowledgment:', logData);
+      
+      // Update local state with the server-confirmed message
+      if (response?.success && response.message) {
+        setLastMessage(prev => ({
+          ...prev!,
+          ...response.message,
+          status: 'sent' as const
+        }));
+      } else {
+        // Update status to failed if sending failed
+        setLastMessage(prev => ({
+          ...prev!,
+          status: 'failed' as const,
+          error: response?.error || 'Failed to send message'
+        }));
+      }
+      
+      // Call the provided callback if it exists
+      onAck?.(response);
+    });
+  }, []);
+
+  // Check if a user is online
+  const isUserOnline = useCallback((userId: string) => {
+    return onlineUsers.has(userId);
+  }, [onlineUsers]);
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    isMounted.current = true;
+    
+    // Initialize socket connection
+    const socket = io(url, {
+      path: '/socket.io',
+      transports: ['websocket'],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: maxReconnectionAttempts,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+    });
+
+    // Store socket reference
+    socketRef.current = socket;
+
+    // Connection established
+    socket.on('connect', () => {
+      console.log('[WebSocket] Connected to server');
+      setIsConnected(true);
+      reconnectAttemptsRef.current = 0; // Reset reconnection attempts on successful connection
+    });
+
+    // Connection error
+    socket.on('connect_error', (error) => {
+      console.error('[WebSocket] Connection error:', error);
+      setIsConnected(false);
+    });
+
+    // Disconnected
+    socket.on('disconnect', (reason) => {
+      console.log(`[WebSocket] Disconnected: ${reason}`);
+      setIsConnected(false);
+      
+      // Attempt to reconnect if not explicitly disconnected
+      if (reason !== 'io client disconnect' && isMounted.current) {
+        const attempts = reconnectAttemptsRef.current + 1;
+        reconnectAttemptsRef.current = attempts;
+        
+        if (attempts <= maxReconnectionAttempts) {
+          const delay = Math.min(1000 * Math.pow(2, attempts), 30000);
+          console.log(`[WebSocket] Attempting to reconnect (${attempts}/${maxReconnectionAttempts}) in ${delay}ms`);
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isMounted.current) {
+              socket.connect();
+            }
+          }, delay);
+        } else {
+          console.error('[WebSocket] Max reconnection attempts reached');
+        }
+      }
+    });
+
+    // Handle online users update
+    socket.on('onlineUsers', (users: string[]) => {
+      if (isMounted.current) {
+        setOnlineUsers(new Set(users));
+      }
+    });
+
+    // Handle new message from server
+    socket.on('newMessage', (message: WebSocketMessage) => {
+      if (isMounted.current) {
+        console.log('[WebSocket] New message received:', message);
+        setLastMessage(message);
+        
+        // Acknowledge receipt of the message
+        if (message.senderId && message._id) {
+          socket.emit('messageReceived', {
+            messageId: message._id,
+            recipientId: message.senderId
+          });
+        }
+      }
+    });
+
+    // Handle message status updates (delivered, read)
+    socket.on('messageStatus', (data: { messageId: string; status: MessageStatus }) => {
+      if (isMounted.current && lastMessage?._id === data.messageId) {
+        console.log(`[WebSocket] Message status updated to ${data.status} for message ${data.messageId}`);
+        setLastMessage(prev => ({
+          ...prev!,
+          status: data.status,
+          ...(data.status === 'read' ? { read: true } : {})
+        }));
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      isMounted.current = false;
+      
+      // Clear any pending reconnection attempts
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      
+      // Disconnect socket
+      if (socket.connected) {
+        socket.disconnect();
+      }
+    };
+  }, [url]);
+
+  // Create the context value
+  const contextValue = useMemo(() => ({
+    socket: socketRef.current,
+    isConnected,
+    onlineUsers,
+    lastMessage,
+    sendMessage,
+    isUserOnline,
+  }), [isConnected, onlineUsers, lastMessage, sendMessage, isUserOnline]);
+
+  return (
+    <WebSocketContext.Provider value={contextValue}>
+      {children}
+    </WebSocketContext.Provider>
+  );
+};
+
+export { WebSocketProvider };

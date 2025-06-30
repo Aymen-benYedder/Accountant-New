@@ -1,13 +1,15 @@
 import React from "react";
 import { Box, Typography } from "@mui/material";
-import { MessagesProps } from "@app/_components/apps/_types/ChatTypes";
+import { MessagesProps, MessageStatus } from "@app/_components/apps/_types/ChatTypes";
 
 interface ReceivedMessageContentProps {
   message: MessagesProps & {
     content: string;
     timestamp?: string | Date;
     sent_at?: string | Date;
-    status?: string;
+    status?: MessageStatus;
+    read?: boolean;
+    readAt?: string | Date;
   };
   senderName: string;
 }
@@ -87,7 +89,7 @@ const ReceivedMessageContent: React.FC<ReceivedMessageContentProps> = ({
           >
             {formatTimestamp(message.timestamp || message.sent_at || undefined)}
           </Typography>
-          {message.status === 'received' && (
+          {message.status && (
             <Box
               sx={{
                 display: 'inline-flex',
@@ -101,16 +103,16 @@ const ReceivedMessageContent: React.FC<ReceivedMessageContentProps> = ({
             >
               <Typography
                 variant="caption"
+                color={message.status === 'error' ? 'error' : 'text.secondary'}
                 sx={{
-                  color: 'rgba(0, 0, 0, 0.7)',
-                  fontSize: '0.65rem',
-                  lineHeight: 1.2,
+                  fontSize: '0.6rem',
                   fontWeight: 500,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
+                  opacity: 0.8,
+                  textTransform: 'capitalize'
                 }}
               >
-                Received
+                {message.status}
+                {message.read && ' • Read'}
               </Typography>
             </Box>
           )}

@@ -67,7 +67,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ companyId, refreshDocume
       formData.append("category", data.category);
       if (data.description) formData.append("description", data.description);
 
-      return await fetch("/api/documents", {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      return await fetch(`${apiBaseUrl}/documents`, {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -78,7 +79,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ companyId, refreshDocume
     },
     onSuccess: async (res) => {
       if (res.ok) {
-        queryClient.invalidateQueries({ queryKey: refreshDocumentsKey });
+        // Invalidate the query with the exact key used in CompanyStoragePage
+        await queryClient.invalidateQueries({ 
+          queryKey: ['company-documents', companyId],
+          refetchType: 'active' 
+        });
         reset();
         setProgress(0);
       }
