@@ -89,6 +89,10 @@ const ChatAppContent = () => {
 
     try {
       // Use WebSocket to mark messages as read
+      if (!currentUserId) {
+        console.error('[markMessagesAsRead] Cannot mark messages as read: currentUserId is null');
+        return;
+      }
       const result = await markMessagesAsReadWebSocket(messageIds, currentUserId);
       
       if (result.success) {

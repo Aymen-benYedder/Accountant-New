@@ -480,7 +480,7 @@ export default function ProjectsListPage() {
                       ? company.logo.startsWith("http")
                         ? company.logo
                         // Always load files from backend root for relative /uploads paths!
-                        : `http://localhost:3000${company.logo}`
+                        : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}${company.logo}`
                       : project.logo
                   }
                   alt={company.name}

@@ -1,11 +1,10 @@
 import React, { useEffect, useCallback } from "react";
-import { Box, Chip, Typography, Tooltip, CircularProgress } from "@mui/material";
+import { Box, Chip, Typography } from "@mui/material";
 import { SentMessageContent } from "../SentMessageContent";
 import { ReceivedMessageContent } from "../ReceivedMessageContent";
 import { MessagesProps, MessageStatus } from "@app/_components/apps/_types/ChatTypes";
-import { Check, DoneAll } from "@mui/icons-material";
 import { useWebSocket } from "@contexts/WebSocketContext";
-import { formatDistanceToNow } from "date-fns";
+
 
 // Enhanced message type that makes content required and handles status properly
 type EnhancedMessageProps = Omit<MessagesProps, 'status' | 'content'> & {
@@ -119,47 +118,7 @@ const ActiveConversationChat: React.FC<ActiveConversationChatProps> = (props) =>
     }
   }, [socket, isConnected, messages, currentUserId]);
   
-  // Render message status indicator
-  const renderMessageStatus = (message: EnhancedMessageProps) => {
-    const status = messageStatus[message._id || ''] || message.status;
-    const timestamp = message.timestamp || message.createdAt || message.sent_at;
-    const timeAgo = timestamp ? formatDistanceToNow(new Date(timestamp), { addSuffix: true }) : '';
-    
-    switch (status) {
-      case 'sending':
-        return (
-          <Tooltip title="Sending...">
-            <CircularProgress size={16} />
-          </Tooltip>
-        );
-      case 'sent':
-        return (
-          <Tooltip title={`Sent ${timeAgo}`}>
-            <Check fontSize="small" color="disabled" />
-          </Tooltip>
-        );
-      case 'delivered':
-        return (
-          <Tooltip title={`Delivered ${timeAgo}`}>
-            <DoneAll fontSize="small" color="disabled" />
-          </Tooltip>
-        );
-      case 'read':
-        return (
-          <Tooltip title={`Read ${timeAgo}`}>
-            <DoneAll fontSize="small" color="primary" />
-          </Tooltip>
-        );
-      case 'error':
-        return (
-          <Tooltip title="Failed to send">
-            <Typography variant="caption" color="error">Failed</Typography>
-          </Tooltip>
-        );
-      default:
-        return null;
-    }
-  };
+  // Message status rendering is handled in the message content components
   
   // Loading state
   if (loading) {

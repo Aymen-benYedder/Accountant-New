@@ -28,7 +28,7 @@ const categories = [
 
 type FileUploadProps = {
   companyId?: string;
-  refreshDocumentsKey: any[];
+  // refreshDocumentsKey is no longer used - removed
 };
 
 type FormInput = {
@@ -37,7 +37,7 @@ type FormInput = {
   description?: string;
 };
 
-export const FileUpload: React.FC<FileUploadProps> = ({ companyId, refreshDocumentsKey }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ companyId }) => {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState(0);

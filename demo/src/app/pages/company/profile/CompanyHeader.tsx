@@ -14,7 +14,7 @@ const CompanyHeader: React.FC<CompanyHeaderProps> = ({ logo, name, tin, onEdit }
   let avatarSrc = logo && logo.trim() !== ""
     ? (logo.startsWith("http")
       ? logo
-      : `http://localhost:3000${logo}`)
+      : `${import.meta.env.VITE_API_BASE_URL?.replace('/api', '')}${logo}`)
     : "/assets/images/logos/project-logo-1.png";
 
   return (

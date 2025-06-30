@@ -324,7 +324,7 @@ function CompanyStoragePage() {
   return (
     <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 8 }}>
 {/* --- File Upload (World-class, Advanced, Secure) --- */}
-      <FileUpload companyId={id} refreshDocumentsKey={['company-documents', id]} />
+      <FileUpload companyId={id} />
       <Box maxWidth="xl" mx="auto" pt={5} px={{ xs: 1, md: 3 }}>
         <Stack direction={{ xs: "column", md: "row" }} alignItems="center" justifyContent="space-between" spacing={2} mb={2}>
           <Typography variant="h3" fontWeight={700} color="primary.main">
