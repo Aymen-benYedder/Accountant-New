@@ -1,0 +1,39 @@
+# Render configuration for deploying both frontend and backend
+
+# Frontend service (Vite + React)
+services:
+  - type: web
+    name: accountant-frontend
+    env: node
+    # Build command runs from the demo directory
+    buildCommand: cd demo && npm install && npm run build
+    # Publish the dist directory from the demo folder
+    staticPublishPath: "./demo/dist"
+    envVars:
+      - key: NODE_VERSION
+        value: 18.x
+      - key: VITE_API_URL
+        value: https://accountant-backend.onrender.com  # Update this with your actual backend URL
+
+# Backend service (Node.js + Express)
+  - type: web
+    name: accountant-backend
+    env: node
+    # Build command for the backend
+    buildCommand: cd server && npm install
+    # Start command for the backend
+    startCommand: node app.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false  # This should be set in the Render dashboard
+      - key: JWT_SECRET
+        sync: false  # This should be set in the Render dashboard
+    # Health check path for the backend
+    healthCheckPath: /api/health
+    # Plan and region configuration
+    plan: free
+    region: oregon
