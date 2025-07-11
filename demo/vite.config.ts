@@ -2,10 +2,24 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { resolve } from 'path';
 import fs from 'fs';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'copy-redirects',
+      closeBundle: () => {
+        const src = path.resolve(__dirname, 'public/_redirects');
+        const dest = path.resolve(__dirname, 'dist/_redirects');
+        if (fs.existsSync(src)) {
+          fs.copyFileSync(src, dest);
+          console.log('Copied _redirects to dist');
+        }
+      }
+    }
+  ],
   resolve: {
     alias: [
       { find: "@jumbo", replacement: "/src/@jumbo" },
