@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { CONTAINER_MAX_WIDTH } from "@app/_config/layouts";
 // Import the WebSocket hook directly
 const useWebSocket = () => ({
@@ -57,6 +57,7 @@ interface BackendUser {
   isFavorite?: boolean; // Locally-tracked favorite state
   companies?: string[]; // Array of company ObjectId strings assigned to user
   online?: boolean;     // User online status
+  profile_pic?: string; // Profile picture URL
 }
 
 // Data held in the user creation/update dialog form
@@ -66,6 +67,7 @@ interface UserFormData {
   role: string;
   password?: string; // Only needed for creating new users
   companies?: string[]; // Added for form to edit assigned companies
+  profile_pic?: string; // Add profile_pic URL
 }
 
 // Default state for form data
@@ -198,7 +200,7 @@ function UserCard({
           }}
         >
           <Avatar
-            src={demoAvatars[idx % demoAvatars.length]}
+            src={user.profile_pic || demoAvatars[idx % demoAvatars.length]}
             sx={{ width: 56, height: 56, fontWeight: 600, fontSize: 22 }}
           >
             {getInitials(user.name, user.email)}
@@ -284,9 +286,14 @@ function UserCard({
             }}
             aria-label="Message Owner"
           >
-            <svg viewBox="0 0 24 24" style={{ width: 22, height: 22 }}>
-              <path fill="currentColor" d="M12 20q-3.025 0-5.513-1.238T3.1 15.125Q2 13.4 2 11.5t1.1-3.625Q4.487 6.25 6.975 5.012T12 3q3.025 0 5.513 1.237T20.9 7.875Q22 9.6 22 11.5t-1.1 3.625q-1.387 2.125-3.875 3.363T12 20Zm0-2q2.325 0 4.325-.888T19.4 15q.775-1.125.775-2.5t-.775-2.5Q19.125 8.95 17.125 8.062T12 7.063 6.875 8.05 4.6 10q-.775 1.125-.775 2.5t.775 2.5q1.2 1.4 3.2 2.287T12 18ZM8 10h8v2H8v-2Zm4 6q-.425 0-.713-.288T11 15q0-.425.288-.713T12 14q.425 0 .713.288T13 15q0 .425-.288.713T12 16Z" />
-            </svg>
+<svg viewBox="0 0 24 24" style={{ width: 22, height: 22 }}>
+  <path fill="none" stroke="currentColor" strokeWidth="2" d="M3 4h18c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H6l-3 3v-3H3c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+</svg>
+
+
+
+
+
           </IconButton>
         )}
       </Stack>
@@ -307,8 +314,12 @@ export default function UsersListPage() {
   const { userId: currentUserId, role: currentUserRole } = getCurrentUserJwt();
 
   // ...
-// State for all users (fetched from backend)
-const [users, setUsers] = useState<BackendUser[]>([]);
+  // State for all users (fetched from backend)
+  const [users, setUsers] = useState<BackendUser[]>([]);
+  // Search & filter state
+  const [search, setSearch] = useState("");
+  const [filterRole, setFilterRole] = useState("");
+  const [filterCompany, setFilterCompany] = useState("");
   // State for loading and errors
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -356,6 +367,11 @@ const [users, setUsers] = useState<BackendUser[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   // Password error messaging (registration only)
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  // New: Password state for delete confirmation
+  const [deletePassword, setDeletePassword] = useState<string>("");
+  const [deletePasswordError, setDeletePasswordError] = useState<string | null>(null);
+  const [profilePicFile, setProfilePicFile] = useState<File | null>(null); // State for the selected file
+  const [profilePicPreview, setProfilePicPreview] = useState<string | null>(null); // State for image preview
 
   // Fetch users from backend on mount
   useEffect(() => {
@@ -402,11 +418,14 @@ const [users, setUsers] = useState<BackendUser[]>([]);
   const openDialog = (user?: BackendUser) => {
     if (user) {
       setEditUser(user);
-      setFormData({ name: user.name, email: user.email, role: user.role, companies: user.companies || [] });
+      setFormData({ name: user.name, email: user.email, role: user.role, companies: user.companies || [], profile_pic: user.profile_pic || "" }); // Include profile_pic
+      setProfilePicPreview(user.profile_pic || null); // Set preview if existing user has pic
     } else {
       setEditUser(null);
       setFormData(emptyUser);
+      setProfilePicPreview(null); // Clear preview for new user
     }
+    setProfilePicFile(null); // Clear selected file
     setPasswordError(null);
     setDialogOpen(true);
   };
@@ -417,6 +436,8 @@ const [users, setUsers] = useState<BackendUser[]>([]);
     setEditUser(null);
     setFormData(emptyUser);
     setPasswordError(null);
+    setProfilePicFile(null); // Clear selected file on close
+    setProfilePicPreview(null); // Clear preview on close
   };
 
   // Handles all user input form changes
@@ -429,51 +450,95 @@ const [users, setUsers] = useState<BackendUser[]>([]);
     e.preventDefault();
     setPasswordError(null);
     
+    console.log("[Frontend] handleSubmit: Starting user form submission.");
+
     if (!editUser && (!formData.password || formData.password.length < 6)) {
       setPasswordError("Password is required (min 6 chars)");
+      console.warn("[Frontend] handleSubmit: Password validation failed for new user.");
       return;
     }
     
     try {
       setLoading(true);
-      if (editUser) {
-        await api.put<BackendUser>(`/users/${editUser._id}`, {
-          name: formData.name,
-          email: formData.email,
-          role: formData.role,
-          companies: formData.companies,
-        });
+      let profilePicUrl = editUser?.profile_pic || ""; // Retain existing URL for edit mode
+      console.log("[Frontend] handleSubmit: Initial profilePicUrl:", profilePicUrl);
+
+      if (profilePicFile) {
+        console.log("[Frontend] handleSubmit: Profile picture file selected. Uploading...");
+        const formData = new FormData();
+        formData.append('profile_pic', profilePicFile);
+        try {
+          const uploadRes = await api.post('/upload/profile-pic', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+          profilePicUrl = uploadRes.data.fileUrl; // Get the URL of the uploaded file
+          console.log("[Frontend] handleSubmit: Profile picture uploaded successfully. URL:", profilePicUrl);
+        } catch (uploadErr: any) {
+          const errorMessage = uploadErr.response?.data?.error || uploadErr.message || "Failed to upload profile picture";
+          setError(errorMessage);
+          setLoading(false);
+          console.error("[Frontend] handleSubmit: Profile picture upload failed:", errorMessage, uploadErr);
+          return;
+        }
       } else {
-        const userData = {
-          name: formData.name,
-          email: formData.email,
-          role: currentUserRole === "accountant" ? "owner" : formData.role,
-          password: formData.password,
-          companies: formData.companies,
-        };
-        
+        console.log("[Frontend] handleSubmit: No new profile picture file selected.");
+      }
+
+      const userData = {
+        name: formData.name,
+        email: formData.email,
+        role: currentUserRole === "accountant" ? "owner" : formData.role,
+        password: formData.password, // Only for new users, will be ignored by backend for updates
+        companies: formData.companies,
+        profile_pic: profilePicUrl, // Include profile picture URL
+      };
+
+      console.log("[Frontend] handleSubmit: Sending user data to backend:", userData);
+
+      if (editUser) {
+        console.log("[Frontend] handleSubmit: Updating existing user:", editUser._id);
+        await api.put<BackendUser>(`/users/${editUser._id}`, userData);
+        console.log("[Frontend] handleSubmit: User updated successfully.");
+      } else {
+        console.log("[Frontend] handleSubmit: Creating new user.");
         await api.post<BackendUser>("/users", userData);
+        console.log("[Frontend] handleSubmit: User created successfully.");
       }
       closeDialog();
       await fetchUsers();
       await fetchCompanies();
+      console.log("[Frontend] handleSubmit: Dialog closed, users and companies refetched.");
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      const errorMessage = err.response?.data?.error || err.message;
+      setError(errorMessage);
+      console.error("[Frontend] handleSubmit: User submission failed:", errorMessage, err);
     } finally {
       setLoading(false);
+      console.log("[Frontend] handleSubmit: Submission process finished.");
     }
   };
 
   // Delete user after confirmation
   const confirmDelete = async () => {
     if (!deleteId) return;
+    if (!deletePassword || deletePassword.length < 6) {
+      setDeletePasswordError("Password is required (min 6 chars)");
+      return;
+    }
+    setDeletePasswordError(null);
     try {
       setLoading(true);
-      await api.delete(`/users/${deleteId}`);
+      // New: Include password in delete request
+      await api.delete(`/users/${deleteId}`, {
+        data: { password: deletePassword }
+      });
       setDeleteId(null);
+      setDeletePassword("");
       await fetchUsers();
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      setDeletePasswordError(err.response?.data?.error || err.message);
     } finally {
       setLoading(false);
     }
@@ -489,7 +554,26 @@ const [users, setUsers] = useState<BackendUser[]>([]);
     setFavorite(id, !users.find(u => u._id === id)?.isFavorite);
   };
 
-
+  // Memoized filtered users
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      // If accountant, show only owners this accountant manages
+      if (currentUserRole === "accountant" && managedOwners.length > 0) {
+        if (!(user.role === "owner" && managedOwners.includes(user._id))) return false;
+      }
+      // Search by name/email
+      const searchText = search.trim().toLowerCase();
+      const matchesSearch =
+        !searchText ||
+        user.name?.toLowerCase().includes(searchText) ||
+        user.email?.toLowerCase().includes(searchText);
+      // Filter by role
+      const matchesRole = !filterRole || user.role === filterRole;
+      // Filter by company
+      const matchesCompany = !filterCompany || (user.companies || []).includes(filterCompany);
+      return matchesSearch && matchesRole && matchesCompany;
+    });
+  }, [users, search, filterRole, filterCompany, currentUserRole, managedOwners]);
 
   // Render the main UI
   return (
@@ -518,11 +602,46 @@ const [users, setUsers] = useState<BackendUser[]>([]);
           </Typography>
         </Box>
       )}
-      {/* Top toolbar: Title and Add button */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant={"h2"} mb={3}>
+      {/* Top toolbar: Title, search, filters, and Add button */}
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "stretch", sm: "center" }} mb={3}>
+        <Typography variant={"h2"} mb={3} sx={{ flex: 1 }}>
           {t("views.title.users")}
         </Typography>
+        <TextField
+          size="small"
+          label="Search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          sx={{ minWidth: 180 }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Role"
+          value={filterRole}
+          onChange={e => setFilterRole(e.target.value)}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          <MenuItem value="user">User</MenuItem>
+          <MenuItem value="client">Client</MenuItem>
+          <MenuItem value="owner">Owner</MenuItem>
+          <MenuItem value="accountant">Accountant</MenuItem>
+          <MenuItem value="admin">Admin</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Company"
+          value={filterCompany}
+          onChange={e => setFilterCompany(e.target.value)}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {companiesList.map(company => (
+            <MenuItem key={company._id} value={company._id}>{company.name}</MenuItem>
+          ))}
+        </TextField>
         <Button variant="contained" startIcon={<Add />} onClick={() => openDialog()}>
           {t("actions.addUser", "Add User")}
         </Button>
@@ -533,15 +652,7 @@ const [users, setUsers] = useState<BackendUser[]>([]);
 
       {/* The user card list (main content) */}
       <Box>
-        {users
-          .filter(user => {
-            // If accountant, show only owners this accountant manages
-            if (currentUserRole === "accountant" && managedOwners.length > 0) {
-              return user.role === "owner" && managedOwners.includes(user._id);
-            }
-            return true; // fallback: show all for non-accountants
-          })
-          .map((user, idx) => (
+        {filteredUsers.map((user: BackendUser, idx: number) => (
           <UserCard
             key={user._id}
             user={user}
@@ -568,6 +679,33 @@ const [users, setUsers] = useState<BackendUser[]>([]);
         <form onSubmit={handleSubmit} noValidate>
           <DialogContent dividers>
             <Stack spacing={3}>
+              {/* Profile Picture Upload */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
+                <Avatar
+                  src={profilePicPreview || undefined}
+                  sx={{ width: 80, height: 80, mb: 2 }}
+                >
+                  {getInitials(formData.name, formData.email)}
+                </Avatar>
+                <input
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  id="profile-pic-upload"
+                  type="file"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setProfilePicFile(e.target.files[0]);
+                      setProfilePicPreview(URL.createObjectURL(e.target.files[0]));
+                    }
+                  }}
+                />
+                <label htmlFor="profile-pic-upload">
+                  <Button variant="outlined" component="span">
+                    {profilePicPreview ? "Change Picture" : "Upload Picture"}
+                  </Button>
+                </label>
+              </Box>
+
               {/* Name input */}
               <TextField
                 fullWidth
@@ -645,10 +783,8 @@ const [users, setUsers] = useState<BackendUser[]>([]);
           </DialogContent>
           <DialogActions>
             <Button onClick={closeDialog}>{t("actions.cancel", "Cancel")}</Button>
-            <Button type="submit" variant="contained">
-              {editUser
-                ? t("actions.update", "Update")
-                : t("actions.add", "Add")}
+            <Button type="submit" variant="contained" disabled={loading}> {/* Disable button while loading */}
+              {loading ? (editUser ? "Updating..." : "Adding...") : (editUser ? t("actions.update", "Update") : t("actions.add", "Add"))}
             </Button>
           </DialogActions>
         </form>
@@ -662,6 +798,17 @@ const [users, setUsers] = useState<BackendUser[]>([]);
           <DialogTitle>{"Delete User"}</DialogTitle>
           <DialogContent>
             {"Are you sure you want to delete this user? This action cannot be undone."}
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Password"
+              type="password"
+              fullWidth
+              value={deletePassword || ''}
+              onChange={e => setDeletePassword(e.target.value)}
+              error={!!deletePasswordError}
+              helperText={deletePasswordError || ''}
+            />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDeleteId('')}>{"Cancel"}</Button>

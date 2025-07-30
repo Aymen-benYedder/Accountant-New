@@ -11,6 +11,7 @@ const { Server } = require('socket.io');
 const jwt = require("jsonwebtoken");
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer'); // Import multer
 
 const authRoutes = require('./src/routes/auth');
 const clientsRoutes = require('./src/routes/clients');
@@ -38,6 +39,7 @@ const allowedOrigins = [
   'https://127.0.0.1:5173',
   
   // Production
+  'https://comptacrm.duckdns.org',
   'https://accountant-new.onrender.com',
   'https://accountant-frontend.onrender.com',
   
@@ -111,6 +113,31 @@ app.use((req, res, next) => {
 // Serve uploads statically from /uploads at root (http://localhost:3000/uploads/...)
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
+// Multer storage configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, 'public/uploads');
+    // Ensure the directory exists
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  },
+});
+
+const upload = multer({ storage: storage });
+
+// Route for file uploads (e.g., profile pictures)
+app.post('/api/upload/profile-pic', upload.single('profile_pic'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No file uploaded' });
+  }
+  // Return the URL of the uploaded file
+  const fileUrl = `/uploads/${req.file.filename}`;
+  res.status(200).json({ fileUrl });
+});
+
 // Configure Socket.IO with CORS
 const io = new Server(server, {
   cors: {
@@ -156,12 +183,17 @@ io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token || 
                  (socket.handshake.headers?.authorization && 
                   socket.handshake.headers.authorization.split(' ')[1]);
-    
     if (!token) {
       console.log('Socket.IO: No token provided');
       return next(new Error('Authentication error: No token provided'));
     }
-
+    // Debug: print the received token and its payload
+    try {
+      const decodedPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf8'));
+      console.log('[Socket.IO] Received token payload:', decodedPayload);
+    } catch (e) {
+      console.log('[Socket.IO] Could not decode token payload:', e.message);
+    }
     const decoded = jwt.verify(token, JWT_SECRET);
     socket.user = decoded;
     next();
@@ -244,12 +276,12 @@ io.on('connection', async (socket) => {
       console.log(`[Socket.io] Updated user ${userId} status to online`);
       io.emit('userStatus', { userId, isOnline: true });
     } catch (err) {
-      console.error('[Socket.io] Error updating user status to online:', err);
+      console.error('[Socket.IO] Error updating user status to online:', err);
     }
 
     // Listen for test messages and echo them back
     socket.on('test', (data) => {
-        console.log(`[Socket.io] Test message received from ${socket.id}:`, data);
+        console.log(`[Socket.IO] Test message received from ${socket.id}:`, data);
         // Echo the message back to the sender
         socket.emit('test', {
             ...data,
@@ -282,7 +314,7 @@ io.on('connection', async (socket) => {
               lastSeen: new Date()
             });
           } catch (err) {
-            console.error('[Socket.io] Error updating user status to offline:', err);
+            console.error('[Socket.IO] Error updating user status to offline:', err);
           }
         } else {
           console.log(`[Socket.io] User ${userId} still has ${userSockets[userId].size} active connections`);
@@ -378,7 +410,7 @@ io.on('connection', async (socket) => {
                   timestamp: new Date()
                 });
               }).catch(err => {
-                console.error('[Socket.io] Error updating message status to delivered:', err);
+                console.error('[Socket.IO] Error updating message status to delivered:', err);
               });
             }
           });
@@ -658,7 +690,8 @@ app.get('/', (req, res) => {
   res.send('Accounting Platform API running');
 });
 
-const PORT = process.env.PORT || 3001;
+// const PORT = process.env.PORT || 3000;
+const PORT =  3000;
 
 // Start the server
 server.listen(PORT, '0.0.0.0', () => {

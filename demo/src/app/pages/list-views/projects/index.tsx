@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { MenuItem } from "@mui/material";
 import { useAuth } from "@app/_components/_core/AuthProvider/AuthContext";
 import type { ProjectType } from "@app/_components/views/list/Projects/data";
@@ -113,10 +113,18 @@ export default function ProjectsListPage() {
   // File input refs for logo upload
   const addLogoInputRef = useRef<HTMLInputElement>(null);
   const editLogoInputRef = useRef<HTMLInputElement>(null);
+
+  // Data
   const [companies, setCompanies] = useState<CompanyBackend[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Search & filter state
+  const [search, setSearch] = useState("");
+  const [filterOwner, setFilterOwner] = useState("");
+  const [filterAccountant, setFilterAccountant] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
 
   // Add Company Dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -174,6 +182,8 @@ export default function ProjectsListPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState<boolean>(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deletePasswordError, setDeletePasswordError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCompaniesAndUsers();
@@ -206,6 +216,30 @@ export default function ProjectsListPage() {
   };
 
   const isLoaded = !loading && companies.length > 0 && users.length > 0;
+
+  // Memoized filtered companies
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(company => {
+      // Search by name, TIN, address
+      const searchText = search.trim().toLowerCase();
+      const matchesSearch =
+        !searchText ||
+        company.name?.toLowerCase().includes(searchText) ||
+        company.tin?.toLowerCase().includes(searchText) ||
+        company.address?.toLowerCase().includes(searchText);
+
+      // Filter by owner
+      const matchesOwner = !filterOwner || (company.owner === filterOwner || company.owners?.some(o => o._id === filterOwner));
+
+      // Filter by accountant
+      const matchesAccountant = !filterAccountant || company.accountant === filterAccountant;
+
+      // Filter by status (demo: always 'Owned')
+      const matchesStatus = !filterStatus || filterStatus === 'Owned';
+
+      return matchesSearch && matchesOwner && matchesAccountant && matchesStatus;
+    });
+  }, [companies, search, filterOwner, filterAccountant, filterStatus]);
 
   const openEditDialog = (c: CompanyBackend) => {
     setEditCompany(c);
@@ -313,13 +347,26 @@ export default function ProjectsListPage() {
   // Delete handlers (unchanged)
   const handleDelete = async () => {
     if (!deleteId) return;
+    if (!deletePassword || deletePassword.length < 6) {
+      setDeletePasswordError("Password is required (min 6 chars)");
+      return;
+    }
+    setDeletePasswordError(null);
     try {
       setLoading(true);
+      // Step 1: Verify password with backend
+      await api.post('/auth/verify-password', { password: deletePassword });
+      // Step 2: If password is correct, proceed to delete
       await api.delete(`/companies/${deleteId}`);
       setDeleteId(null);
+      setDeletePassword("");
       await fetchCompaniesAndUsers();
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      if (err.response?.status === 401) {
+        setDeletePasswordError("Incorrect password");
+      } else {
+        setDeletePasswordError(err.response?.data?.message || err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -434,10 +481,56 @@ export default function ProjectsListPage() {
       }}
       disableGutters
     >
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant={"h2"} mb={3}>
-          {t("views.title.projects")}
+      {/* Search and filter toolbar */}
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "stretch", sm: "center" }} mb={3}>
+        <Typography variant={"h2"} mb={3} sx={{ flex: 1 }}>
+          {/* {t("views.title.projects")} */}
+          Archive
         </Typography>
+        <TextField
+          size="small"
+          label="Search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          sx={{ minWidth: 180 }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Owner"
+          value={filterOwner}
+          onChange={e => setFilterOwner(e.target.value)}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {users.filter(u => u.role === "owner").map(owner => (
+            <MenuItem key={owner._id} value={owner._id}>{owner.name}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Accountant"
+          value={filterAccountant}
+          onChange={e => setFilterAccountant(e.target.value)}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {users.filter(u => u.role === "accountant").map(acct => (
+            <MenuItem key={acct._id} value={acct._id}>{acct.name}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Status"
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          sx={{ minWidth: 120 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          <MenuItem value="Owned">Owned</MenuItem>
+        </TextField>
         <IconButton
           color="primary"
           size="large"
@@ -456,7 +549,7 @@ export default function ProjectsListPage() {
 
       {/* Company cards list */}
       <Box>
-        {(companies ?? []).map((company, idx) => {
+        {(filteredCompanies ?? []).map((company, idx) => {
           const project = mapCompanyToProject(company, idx);
           return (
             <Card
@@ -1125,6 +1218,17 @@ export default function ProjectsListPage() {
             "dialogs.confirmDeleteCompany",
             "Are you sure you want to delete this company? This action cannot be undone."
           )}
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Password"
+            type="password"
+            fullWidth
+            value={deletePassword}
+            onChange={e => setDeletePassword(e.target.value)}
+            error={!!deletePasswordError}
+            helperText={deletePasswordError || ''}
+          />
         </DialogContent>
         <DialogActions>
           <button type="button" onClick={() => setDeleteId(null)} style={{ border: "none", background: "none", padding: 0 }}>

@@ -1,0 +1,77 @@
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "env": {
+        "LOG_LEVEL": "warn"
+      },
+      "alwaysAllow": [
+        "create_entities",
+        "search_nodes",
+        "open_nodes",
+        "read_graph",
+        "delete_relations",
+        "create_relations",
+        "add_observations",
+        "delete_entities",
+        "delete_observations"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem"
+      ],
+      "env": {},
+      "disabled": true,
+      "alwaysAllow": []
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "env": {},
+      "disabled": true,
+      "alwaysAllow": []
+    },
+    "sequentialThinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequentialthinking"
+      ],
+      "env": {},
+      "disabled": true,
+      "alwaysAllow": []
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "env": {},
+      "alwaysAllow": [
+        "resolve-library-id",
+        "get-library-docs"
+      ]
+    },
+    "ragLocal": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-rag-local"
+      ],
+      "env": {},
+      "disabled": true,
+      "alwaysAllow": []
+    }
+  }
+}

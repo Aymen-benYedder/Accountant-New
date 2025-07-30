@@ -76,6 +76,8 @@ const MessagesList = () => {
           },
           message: msg.content,
           date: msg.timestamp || msg.createdAt || "",
+          read: msg.read,
+          isUnreadForCurrentUser: msg.recipientId === userId && !msg.read, // Calculate for current user
         };
       });
       setItems(mapped);
@@ -87,7 +89,7 @@ const MessagesList = () => {
   return (
     <List disablePadding>
       {items.map((item, index) => (
-        <MessageItem item={item} key={index} />
+        <MessageItem item={item} key={index} isUnreadForCurrentUser={item.isUnreadForCurrentUser} />
       ))}
     </List>
   );

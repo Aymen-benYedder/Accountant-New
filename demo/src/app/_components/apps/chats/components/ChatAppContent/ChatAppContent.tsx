@@ -44,12 +44,12 @@ const ChatAppContent = () => {
   const [messages, setMessages] = React.useState<any[]>([]);
   const [remoteUser, setRemoteUser] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
-  const [unreadCount, setUnreadCount] = React.useState(0);
+  // Removed local unreadCount, now managed by WebSocketContext
   
   // Use proper type for JumboScrollbar ref
   const scrollRef = React.useRef<Scrollbars>(null);
 
-  const { socket, isConnected, sendMessage: wsSendMessage, markMessagesAsRead: markMessagesAsReadWebSocket } = useWebSocket();
+  const { socket, isConnected, sendMessage: wsSendMessage, markMessagesAsRead: markMessagesAsReadWebSocket, unreadMessageCount } = useWebSocket();
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
   const pendingMarkAsReadQueue = React.useRef<Array<{messageIds: string[], readerId: string}>>([]);
   const outgoingMessageQueue = React.useRef<any[]>([]);
@@ -112,7 +112,7 @@ const ChatAppContent = () => {
               : msg
           )
         );
-        setUnreadCount(prev => Math.max(0, prev - messageIds.length));
+        // setUnreadCount(prev => Math.max(0, prev - messageIds.length)); // Removed, now managed by WebSocketContext
       } else {
         console.error('[markMessagesAsRead] Failed to mark messages as read via WebSocket:', result.error);
       }
@@ -302,20 +302,17 @@ const ChatAppContent = () => {
         if (isServerResponseForOurMessage) {
           console.log('[ChatAppContent] Replacing optimistic message with server response');
           return prevMessages.map(msg => 
-            msg._id === `optimistic-${newMessage.tempId}` 
+            (msg.tempId && newMessage.tempId && msg.tempId === newMessage.tempId)
               ? { ...processedMessage, _id: newMessage._id, status: 'sent' }
               : msg
           );
         }
-        
         // Simple deduplication by ID
         const exists = prevMessages.some(msg => msg._id === processedMessage._id);
-        
         if (exists) {
           console.log('[ChatAppContent] Duplicate message detected, ignoring');
           return prevMessages;
         }
-        
         console.log('[ChatAppContent] Adding new message to state');
         return [...prevMessages, processedMessage];
       });
@@ -564,9 +561,9 @@ const ChatAppContent = () => {
       </div>
       
       {/* Header */}
-      <ActiveConversationHeader 
-        activeConversation={activeConversation} 
-        hasUnreadMessages={unreadCount > 0}
+      <ActiveConversationHeader
+        activeConversation={activeConversation}
+        hasUnreadMessages={unreadMessageCount > 0} // Use global unreadMessageCount
       />
       
       {/* Messages area with scroll */}

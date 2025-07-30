@@ -9,6 +9,7 @@ const {
   updateDocument,
   deleteDocument,
   downloadDocument,
+  getTaskDocuments,
 } = require('../controllers/DocumentController');
 
 const multer = require("multer");
@@ -69,6 +70,7 @@ const { cacheResult } = require("../utils/cache");
 
 router.get('/', jwtAuth, cacheResult("documents", 30), getAllDocuments);
 router.get('/:id', jwtAuth, cacheResult("documents_id", 15), getDocumentById);
+router.get('/task/:taskId', jwtAuth, getTaskDocuments);
 router.get('/:id/download', jwtAuth, downloadDocument);
 router.post('/', jwtAuth, upload.single("file"), createDocument);
 router.put('/:id', jwtAuth, upload.single("file"), updateDocument);

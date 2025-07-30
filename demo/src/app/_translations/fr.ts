@@ -88,7 +88,7 @@ export const frTranslation = {
       socialWall: "Mur social",
       settings: "Paramètres",
       projects: "Projets",
-      users: "Utilisatrices",
+      users: "Utilisateurs",
       onboarding1: "Intégration 1",
       onboarding2: "Intégration 2",
       onboarding3: "Intégration 3",
@@ -248,7 +248,7 @@ export const frTranslation = {
   views: {
     title: {
       projects: "Projets",
-      users: "Utilisatrices",
+      users: "Utilisateurs",
     },
   },
   modules: {

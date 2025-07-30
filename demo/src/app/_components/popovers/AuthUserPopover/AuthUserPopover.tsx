@@ -14,14 +14,14 @@ import {
   ThemeProvider,
   Typography,
 } from "@mui/material";
-import { authUser } from "./data";
+// import { authUser } from "./data"; // Removed static data import
 import { JumboDdPopover } from "@jumbo/components/JumboDdPopover";
 import { useAuth } from "@app/_components/_core/AuthProvider/hooks";
 import { useNavigate } from "react-router-dom";
 
 const AuthUserPopover = () => {
   const { theme } = useJumboTheme();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth(); // Destructure user from useAuth()
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -34,7 +34,7 @@ const AuthUserPopover = () => {
       <JumboDdPopover
         triggerButton={
           <Avatar
-            src={authUser?.profile_pic}
+            src={user?.profile_pic} // Use dynamic user data
             sizes={"small"}
             sx={{ boxShadow: 23, cursor: "pointer" }}
           />
@@ -50,14 +50,14 @@ const AuthUserPopover = () => {
           }}
         >
           <Avatar
-            src={authUser?.profile_pic}
-            alt={authUser.name}
-            sx={{ width: 60, height: 60, mb: 2 }}
-          />
-          <Typography variant={"h5"}>{authUser.name}</Typography>
-          <Typography variant={"body1"} color="text.secondary">
-            {authUser.handle}
-          </Typography>
+            src={user?.profile_pic} // Use dynamic user data
+            alt={user?.name || user?.email || "User"} // Fallback for alt text
+           sx={{ width: 60, height: 60, mb: 2 }}
+         />
+         <Typography variant={"h5"}>{user?.name || user?.email || "Guest"}</Typography> {/* Use dynamic user data with fallback */}
+         <Typography variant={"body1"} color="text.secondary">
+           {user?.email || ""} {/* Use dynamic user email */}
+         </Typography>
         </Div>
         <Divider />
         <nav>

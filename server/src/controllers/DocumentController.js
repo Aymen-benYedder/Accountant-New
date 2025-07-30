@@ -94,6 +94,8 @@ exports.createDocument = async (req, res) => {
       path: "/uploads/company-documents/" + req.file.filename,
       mimetype: req.file.mimetype,
       size: req.file.size,
+      // Add task reference if provided
+      task: req.body.task || null,
     });
     await doc.save();
     const populatedDoc = await Document.findById(doc._id)
@@ -107,6 +109,34 @@ exports.createDocument = async (req, res) => {
     res.status(201).json(responseDoc);
   } catch (error) {
     res.status(400).json({ error: 'Failed to create document' });
+  }
+};
+
+// Get documents for a specific task
+exports.getTaskDocuments = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    
+    // Validate taskId
+    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+      return res.status(400).json({ error: 'Invalid task ID' });
+    }
+    
+    // Get documents for this task
+    const docs = await Document.find({ task: taskId })
+      .populate("owner", "name email")
+      .populate("company", "name tin");
+      
+    // Map the documents to include a 'name' field from 'originalname'
+    const mappedDocs = docs.map(doc => ({
+      ...doc.toObject(),
+      name: doc.originalname
+    }));
+      
+    res.json(mappedDocs);
+  } catch (error) {
+    console.error('Error fetching task documents:', error);
+    res.status(500).json({ error: 'Failed to fetch task documents' });
   }
 };
 
@@ -153,6 +183,7 @@ exports.downloadDocument = async (req, res) => {
     
     // Check if file exists
     if (!fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'application/json');
       return res.status(404).json({ error: 'File not found on server' });
     }
 

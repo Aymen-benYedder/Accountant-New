@@ -88,6 +88,9 @@ import PublicProfile from "@app/pages/user/settings/public-profile";
 import SocialWallApp from "@app/pages/user/social-wall";
 import CompanyProfilePage from "@app/pages/company/profile";
 import CompanyStoragePage from "@app/pages/company/profile/storage";
+import TasksListPage from "@app/pages/apps/tasks";
+import TaskDetailPage from "@app/pages/apps/tasks/[id]";
+import ClientTasksListPage from "@app/pages/apps/tasks/client";
 import { WidgetsPage } from "@app/pages/widgets";
 import { createBrowserRouter } from "react-router-dom";
 
@@ -211,6 +214,9 @@ const routes = [
           { path: "/onboarding-1", element: <Page Component={OnboardingPage1} /> },
           { path: "/onboarding-2", element: <Page Component={OnboardingPage2} /> },
           { path: "/onboarding-3", element: <Page Component={OnboardingPage3} /> },
+          { path: "/apps/tasks", element: <Page Component={TasksListPage} /> },
+          { path: "/apps/tasks/client", element: <Page Component={ClientTasksListPage} /> },
+          { path: "/apps/tasks/:id", element: <Page Component={TaskDetailPage} /> },
           { path: "*", element: <NotFoundErrorPage /> },
         ],
       },

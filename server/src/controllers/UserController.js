@@ -134,7 +134,7 @@ const createUser = async (req, res) => {
   console.log("requestion create of user from controller");
   
   try {
-    let { name, email, role, password } = req.body;
+    let { name, email, role, password, profile_pic } = req.body; // Add profile_pic
     if (!password || password.length < 6) {
       return res.status(400).json({ message: "Password is required (min 6 chars)" });
     }
@@ -157,9 +157,13 @@ const createUser = async (req, res) => {
       email,
       role,
       passwordHash,
+      profile_pic, // Add profile_pic
       createdBy: req.user._id
     });
     await user.save();
+    // Invalidate cache
+    await delCache(/^users:/);
+    await delCache(/^companies:/);
     // Exclude passwordHash in response
     const userObj = user.toObject();
     delete userObj.passwordHash;

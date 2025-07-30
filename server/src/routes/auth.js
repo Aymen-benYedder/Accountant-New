@@ -8,9 +8,18 @@ router.get("/me", jwtAuth, async (req, res) => {
  try {
    if (!req.user) return res.status(401).json({ error: "Not authenticated" });
    // Find user by id and return relevant fields
-   const user = await User.findById(req.user.id || req.user._id || req.user.sub).select("_id name email role");
+   const user = await User.findById(req.user.id || req.user._id || req.user.sub).select("_id name email role profile_pic");
    if (!user) return res.status(404).json({ error: "User not found" });
-   res.json(user);
+   // Return consistent structure with login endpoint
+   res.json({
+     user: {
+       id: user._id,
+       name: user.name,
+       email: user.email,
+       role: user.role,
+       profile_pic: user.profile_pic
+     }
+   });
  } catch (err) {
    res.status(500).json({ error: "Unable to fetch user" });
  }
@@ -95,9 +104,33 @@ router.post('/login', async (req, res) => {
     } catch (err) {
       console.error("[AUTH] Error setting user online (login):", err);
     }
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, profile_pic: user.profile_pic } });
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err });
+    res.status(500).json({
+  message: 'Server error',
+  error: err.message || err.toString(),
+  stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined
+});
+  }
+});
+
+// POST /auth/verify-password
+// Requires: { password }
+// Authenticated route. Checks if password matches current user.
+router.post('/verify-password', jwtAuth, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id || req.user.sub;
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Password is required (min 6 chars)' });
+    }
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) return res.status(401).json({ message: 'Invalid password' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 

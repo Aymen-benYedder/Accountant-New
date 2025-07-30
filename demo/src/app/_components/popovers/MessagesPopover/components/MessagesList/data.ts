@@ -9,6 +9,8 @@ export type MessagesDataProps = {
   };
   message: string;
   date: string;
+  read?: boolean;
+  isUnreadForCurrentUser?: boolean; // Add new property
 };
 export const messagesData: MessagesDataProps[] = [
   {

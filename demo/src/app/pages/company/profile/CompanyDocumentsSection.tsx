@@ -124,7 +124,22 @@ const CompanyDocumentsSection: React.FC<Props> = ({ companyId }) => {
       const res = await api.get(`/documents/${doc._id}/download`, {
         responseType: "blob",
       });
-      const blob = new Blob([res.data]);
+      const contentType = res.headers["content-type"];
+      console.log("Download response headers:", res.headers);
+      // Try to read the blob as text to check for error
+      const blob = new Blob([res.data], { type: contentType });
+      if (contentType && (contentType.includes("application/json") || contentType.includes("text/html"))) {
+        const text = await blob.text();
+        console.log("Download response text:", text);
+        try {
+          const error = JSON.parse(text);
+          alert(error.error || "Failed to download file.");
+        } catch {
+          alert("Failed to download file. Server returned HTML or unknown error.");
+        }
+        return;
+      }
+      // If not error, download as file
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -132,7 +147,7 @@ const CompanyDocumentsSection: React.FC<Props> = ({ companyId }) => {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      // Optionally show error feedback here
+      alert("Download failed. Please try again.");
     }
   };
 

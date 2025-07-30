@@ -1,5 +1,5 @@
 import { FileUpload } from "./FileUpload";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   Typography,
@@ -104,8 +104,8 @@ function getIconByExtension(filename: string) {
 }
 
 // Minimal, horizontally-aligned Document Row
-function DocumentCardRow(props: { doc: Document; idx: number; groupIdx: number }) {
-  const { doc, idx, groupIdx } = props;
+function DocumentCardRow(props: { doc: Document; idx: number; groupIdx: number; onDownload: (doc: Document) => void }) {
+  const { doc, idx, groupIdx, onDownload } = props;
   return (
     <Card
       sx={{
@@ -193,9 +193,7 @@ function DocumentCardRow(props: { doc: Document; idx: number; groupIdx: number }
       {/* Download button */}
       <Box flex={0} ml="auto">
         <Button
-          href={doc.path}
-          target="_blank"
-          download
+          onClick={() => onDownload(doc)}
           size="small"
           variant="outlined"
           color="primary"
@@ -217,9 +215,6 @@ function DocumentCardRow(props: { doc: Document; idx: number; groupIdx: number }
     </Card>
   );
 }
-
-
-// ...rest of CompanyStoragePage code remains unchanged, including advanced filters and rendering
 
 function CompanyStoragePage() {
   const { id } = useParams<{ id: string }>();
@@ -320,6 +315,43 @@ function CompanyStoragePage() {
       rows,
     }));
   }, [filteredData, groupBy]);
+
+  // Safe download handler with debug
+  const handleDownload = useCallback(async (doc: Document) => {
+    try {
+      console.log("Attempting to download:", doc);
+      const res = await api.get(`/documents/${doc._id}/download`, {
+        responseType: "blob",
+      });
+      const contentType = res.headers["content-type"];
+      console.log("Download response headers:", res.headers);
+      const blob = new Blob([res.data], { type: contentType });
+      if (contentType && (contentType.includes("application/json") || contentType.includes("text/html"))) {
+        const text = await blob.text();
+        console.log("Download response text:", text);
+        try {
+          const error = JSON.parse(text);
+          alert(error.error || "Failed to download file.");
+        } catch {
+          alert("Failed to download file. Server returned HTML or unknown error.");
+        }
+        return;
+      }
+      // If not error, download as file
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.originalname || "document";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      console.log("Download triggered for:", doc.originalname);
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Download failed. Please try again.");
+    }
+  }, []);
 
   return (
     <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pb: 8 }}>
@@ -469,7 +501,7 @@ function CompanyStoragePage() {
                     <List>
                       {rows.map((doc, idx: number) => (
                         <React.Fragment key={doc._id}>
-                          <DocumentCardRow doc={doc} idx={idx} groupIdx={groupIdx} />
+                          <DocumentCardRow doc={doc} idx={idx} groupIdx={groupIdx} onDownload={handleDownload} />
                           {idx < rows.length - 1 && <Divider component="li" />}
                         </React.Fragment>
                       ))}

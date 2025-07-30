@@ -8,6 +8,7 @@ const UserSchema = new Schema({
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ['admin', 'accountant', 'owner'], default: 'accountant' },
+  profile_pic: { type: String, default: '' }, // Add profile_pic field
   // Track who created this user (for 'accountant' ownership)
   createdBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   // Array of company ObjectIds referencing companies owned by this user

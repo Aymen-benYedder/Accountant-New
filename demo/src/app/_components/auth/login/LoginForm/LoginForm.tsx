@@ -55,7 +55,7 @@ const LoginForm = () => {
           fullWidth
           fieldName={"email"}
           label={t("login.email")}
-          defaultValue="demo@example.com"
+          defaultValue="alice.acct@example.com"
         />
         <JumboOutlinedInput
           fieldName={"password"}
@@ -74,7 +74,7 @@ const LoginForm = () => {
             </InputAdornment>
           }
           sx={{ bgcolor: (theme) => theme.palette.background.paper }}
-          defaultValue={"zab#723"}
+          defaultValue={"aliceacct"}
         />
 
         <Stack

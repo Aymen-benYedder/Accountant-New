@@ -402,7 +402,8 @@ export function getMenus() {
     //   ],
     // },
     {
-      label: t("sidebar.menu.listView"),
+      // label: t("sidebar.menu.listView"),
+      label:"Archive",
       children: [
         {
           path: "/list-views/projects",

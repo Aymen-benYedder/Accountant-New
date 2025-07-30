@@ -185,5 +185,16 @@ router.post('/mark-as-read', jwtAuth, async (req, res) => {
     });
   }
 });
+ 
+// Get unread message count for a user
+router.get('/unread/count', jwtAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const count = await Message.countDocuments({ recipientId: userId, read: false });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch unread message count' });
+  }
+});
 
 module.exports = router;
